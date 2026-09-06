@@ -3,14 +3,24 @@ dist
 dist-ssr
 *.local
 
+# pnpm
+pnpm-lock.yaml is committed; only ignore local overrides
+.pnpm-store
+
 .env
 .env.local
 .env.*.local
+
+# Sub-package env files (prevent accidental commit of real keys)
+packages/**/.env
+packages/**/.env.*.local
 
 .claude/personal-workflow.json
 
 .DS_Store
 Thumbs.db
+__pycache__
+*.pyc
 *.log
 npm-debug.log*
 
