@@ -2,6 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:server": "cd packages/server && uvicorn app.main:app --reload --port 8000",
     "build": "pnpm --filter web build",
     "test": "pnpm --filter web test"
   }

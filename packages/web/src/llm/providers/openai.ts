@@ -6,7 +6,8 @@ export async function* streamOpenAI(
 ): AsyncGenerator<StreamChunk> {
   const model = import.meta.env.VITE_LLM_MODEL || 'deepseek-chat'
 
-  const res = await fetch('/api/llm/chat/completions', {
+  const base = import.meta.env.VITE_API_BASE_URL || ''
+  const res = await fetch(`${base}/api/llm/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages, stream: true }),
