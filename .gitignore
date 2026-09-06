@@ -3,6 +3,10 @@ dist
 dist-ssr
 *.local
 
+# pnpm
+pnpm-lock.yaml is committed; only ignore local overrides
+.pnpm-store
+
 .env
 .env.local
 .env.*.local
