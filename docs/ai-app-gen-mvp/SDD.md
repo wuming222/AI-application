@@ -8,17 +8,30 @@ MVP-0 **只做**：ChatInterface + 消息列表状态 + OpenAI 兼容流式调�
 
 API key 只存在于服务端环境变量，不进任何前端产物。Mock provider 使核心逻辑在无 key、断网条件下可完整跑通与测试。
 
+项目采用 **pnpm workspace monorepo**，预留后端位置：
+
+```
+packages/
+  web/      ← Vite + React（前端，MVP-0 全部代码在此）
+  server/   ← 空壳占位，MVP-1 起放 LLM proxy / MCP proxy / BaaS 等
+```
+
+MVP-0 不依赖 server 包，dev 阶段 LLM 请求仍走 Vite proxy 转发到外部 OpenAI 兼容端点。
+
 ## 实现步骤
 
-### 阶段 0：脚手架
+### 阶段 0：Monorepo 脚手架
 
-- `npm create vite@latest`（react-ts 模板）
-- `.gitignore`：`node_modules` / `dist` / `.env` / `.env.local` / `.claude/personal-workflow.json`
-- `.env.example`：`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`（占位，不含真值）
-- `vite.config.ts`：`server.proxy` 把 `/api/llm` 转发到 `LLM_BASE_URL`，在 proxy 的 `configure` 钩子里注入 `Authorization: Bearer <key>`
-- 测试框架：`vitest`
+- 根目录 `package.json`：`"private": true`，无 dependencies
+- 根目录 `pnpm-workspace.yaml`：`packages: ["packages/*"]`
+- `packages/web/`：`npm create vite@latest`（react-ts 模板），加 `zustand`
+- `packages/server/`：仅 `package.json`（name: `@ai-app/server`，version: `0.0.0`）+ `README.md` 说明用途
+- 根 `.gitignore`：`node_modules` / `dist` / `.env` / `.env.local` / `.claude/personal-workflow.json`
+- `packages/web/.env.example`：`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`（占位，不含真值）
+- `packages/web/vite.config.ts`：`server.proxy` 把 `/api/llm` 转发到 `LLM_BASE_URL`，在 proxy 的 `configure` 钩子里注入 `Authorization: Bearer <key>`
+- 测试框架：`vitest`（装在 `packages/web`）
 
-### 阶段 1：类型与 Provider `src/llm/`
+### 阶段 1：类型与 Provider `packages/web/src/llm/`
 
 - `types.ts` — `Message { role, content }`、`StreamChunk { delta: string, done: boolean }`
   - MVP-0 不需要 ToolCall / ToolResult / images / rawParts，全部砍掉
@@ -31,7 +44,7 @@ API key 只存在于服务端环境变量，不进任何前端产物。Mock prov
   - 检查 `signal.aborted`，abort 时立即 return
   - MVP-0 不做重试（重试是 Agent 循环层的职责，不是单次调用的职责）
 
-### 阶段 2：状态与 UI `src/`
+### 阶段 2：状态与 UI `packages/web/src/`
 
 - `store/chatStore.ts` — Zustand：`messages: Message[]`、`isStreaming: boolean`、`sendMessage(text)` 、`abort()`
   - `sendMessage`：追加 user 消息 → 追加空 assistant 消息 → 调 `streamChat` → 逐 chunk 拼接 assistant content → 流结束后标记 `isStreaming = false`
@@ -48,9 +61,10 @@ API key 只存在于服务端环境变量，不进任何前端产物。Mock prov
 
 ## 验收标准
 
-- [ ] `npm run dev` 后输入任意文字，MessageList 逐字显示模型回复
+- [ ] `pnpm --filter web dev` 后输入任意文字，MessageList 逐字显示模型回复
 - [ ] Mock provider 模式下无 API key、断网也能完整跑通
 - [ ] 流式传输中点「停止」，输出立即中断，UI 不再追加内容
 - [ ] 连续发多条消息，历史完整保留且顺序正确
-- [ ] `npm run build` 后产物中 grep 不到 API key
-- [ ] `npm run test` 全绿（至少覆盖：mock provider 产出、SSE 帧解析、abort 信号传播）
+- [ ] `pnpm --filter web build` 后产物中 grep 不到 API key
+- [ ] `pnpm --filter web test` 全绿（至少覆盖：mock provider 产出、SSE 帧解析、abort 信号传播）
+- [ ] `packages/server/` 存在且含 `package.json` + `README.md`，monorepo 结构可用
