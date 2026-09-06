@@ -1,6 +1,6 @@
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.config import LLM_BASE_URL, LLM_API_KEY
 
@@ -28,7 +28,8 @@ async def chat_completions(request: Request):
 
     if upstream.status_code != 200:
         err_body = await upstream.aread()
-        return JSONResponse(status_code=upstream.status_code, content={"error": err_body.decode(errors="replace")})
+        await upstream.aclose()
+        return Response(content=err_body, status_code=upstream.status_code, media_type="application/json")
 
     is_stream = b'"stream":true' in body or b'"stream": true' in body
 
@@ -42,4 +43,4 @@ async def chat_completions(request: Request):
     else:
         data = await upstream.aread()
         await upstream.aclose()
-        return JSONResponse(content=data)
+        return Response(content=data, media_type="application/json")
