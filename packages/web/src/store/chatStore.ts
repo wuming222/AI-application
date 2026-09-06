@@ -31,7 +31,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const signal = abortController.signal
 
     try {
-      const allMessages = [...get().messages]
+      const allMessages = get().messages.filter((m) => m.content !== '')
       let accumulated = ''
 
       for await (const chunk of streamChat(allMessages, signal)) {
