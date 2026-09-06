@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { Message } from '../llm/types'
-import { streamChat } from '../llm/router'
+import { runAgentLoop } from '../agent/runAgentLoop'
+import type { AgentProgress } from '../agent/types'
 
 interface ChatState {
   messages: Message[]
   isStreaming: boolean
+  progress: AgentProgress | null
   sendMessage: (text: string) => void
   abort: () => void
 }
@@ -14,17 +16,18 @@ let abortController: AbortController | null = null
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
+  progress: null,
 
   sendMessage: async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed || get().isStreaming) return
 
     const userMsg: Message = { role: 'user', content: trimmed }
-    const assistantMsg: Message = { role: 'assistant', content: '' }
 
     set((s) => ({
-      messages: [...s.messages, userMsg, assistantMsg],
+      messages: [...s.messages, userMsg],
       isStreaming: true,
+      progress: null,
     }))
 
     abortController = new AbortController()
@@ -32,24 +35,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const allMessages = get().messages.filter((m) => m.content !== '')
-      let accumulated = ''
 
-      for await (const chunk of streamChat(allMessages, signal)) {
-        if (signal.aborted) break
-        accumulated += chunk.delta
-        set((s) => {
-          const updated = [...s.messages]
-          updated[updated.length - 1] = {
-            role: 'assistant',
-            content: accumulated,
-          }
-          return { messages: updated }
-        })
-        if (chunk.done) break
-      }
+      await runAgentLoop(allMessages, {
+        signal,
+        onProgress: (progress) => {
+          set({ progress })
+        },
+      })
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        console.error('Stream error:', err)
+        console.error('Agent loop error:', err)
       }
     } finally {
       abortController = null
