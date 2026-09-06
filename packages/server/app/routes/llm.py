@@ -35,9 +35,14 @@ async def chat_completions(request: Request):
 
     if is_stream:
         async def event_generator():
-            async for chunk in upstream.aiter_bytes():
-                yield chunk
-            await upstream.aclose()
+            try:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+            except Exception:
+                # Client disconnected or upstream error during streaming; silently stop
+                pass
+            finally:
+                await upstream.aclose()
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     else:

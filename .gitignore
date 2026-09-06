@@ -11,6 +11,10 @@ pnpm-lock.yaml is committed; only ignore local overrides
 .env.local
 .env.*.local
 
+# Sub-package env files (prevent accidental commit of real keys)
+packages/**/.env
+packages/**/.env.*.local
+
 .claude/personal-workflow.json
 
 .DS_Store
