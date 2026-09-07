@@ -67,7 +67,7 @@ export async function* streamResponses(
       try {
         const event = JSON.parse(payload)
 
-        if ((event.type === 'response.output_text.delta' || event.type === 'response.reasoning_text.delta') && event.delta) {
+        if (event.type === 'response.output_text.delta' && event.delta) {
           yield { delta: event.delta, done: false }
         }
 
