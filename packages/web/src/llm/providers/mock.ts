@@ -1,4 +1,5 @@
 import type { Message, StreamChunk } from '../types'
+import type { StreamChatOptions } from '../router'
 
 const MOCK_RESPONSE = `你好！我是 AI 助手。这是一个 Mock 响应，用于在没有 API key 的情况下验证流式渲染链路。
 
@@ -7,6 +8,7 @@ const MOCK_RESPONSE = `你好！我是 AI 助手。这是一个 Mock 响应，�
 export async function* streamMock(
   _messages: Message[],
   signal?: AbortSignal,
+  _options?: StreamChatOptions,
 ): AsyncGenerator<StreamChunk> {
   const chars = [...MOCK_RESPONSE]
   for (let i = 0; i < chars.length; i++) {

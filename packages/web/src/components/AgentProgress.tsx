@@ -16,9 +16,21 @@ export function AgentProgress({ progress }: AgentProgressProps) {
     <div style={{ padding: '8px 16px', fontSize: 13, color: '#666', maxHeight: 200, overflowY: 'auto' }}>
       {progress.steps.map((step, i) => (
         <div key={i} style={{ marginBottom: 4 }}>
-          {step.status === 'thinking' ? (
-            <span>第 {step.round} 轮思考中... {step.thinkingText.slice(-60)}</span>
-          ) : (
+          {step.status === 'thinking' && (
+            <span>第 {step.round} 轮思考中...</span>
+          )}
+          {step.status === 'tool-call' && step.toolCalls && (
+            <div>
+              <span>第 {step.round} 轮执行工具:</span>
+              {step.toolCalls.map((tc, j) => (
+                <div key={j} style={{ marginLeft: 16, color: tc.status === 'done' ? '#28a745' : '#d68910' }}>
+                  {tc.status === 'running' ? '⏳' : '✓'} {tc.name}
+                  {tc.args.path && ` (${tc.args.path})`}
+                </div>
+              ))}
+            </div>
+          )}
+          {step.status === 'done' && (
             <span>✓ 第 {step.round} 轮完成</span>
           )}
         </div>

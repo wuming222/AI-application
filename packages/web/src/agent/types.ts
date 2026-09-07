@@ -10,8 +10,16 @@ export interface AgentProgress {
   startAt: number
 }
 
+export interface AgentToolCallInfo {
+  name: string
+  args: Record<string, unknown>
+  status: 'running' | 'done' | 'error'
+  result?: string
+}
+
 export interface AgentProgressStep {
   round: number
   thinkingText: string
-  status: 'thinking' | 'done'
+  status: 'thinking' | 'tool-call' | 'done'
+  toolCalls?: AgentToolCallInfo[]
 }
