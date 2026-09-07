@@ -36,12 +36,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const allMessages = get().messages.filter((m) => m.content !== '')
 
-      await runAgentLoop(allMessages, {
+      const result = await runAgentLoop(allMessages, {
         signal,
         onProgress: (progress) => {
           set({ progress })
         },
       })
+
+      // Update messages with assistant replies from agent loop
+      set({ messages: result.updatedMessages })
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         console.error('Agent loop error:', err)
