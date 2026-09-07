@@ -1,11 +1,11 @@
 import type { Message, StreamChunk, ToolDefinition } from './types'
 import { streamMock } from './providers/mock'
-import { streamOpenAI } from './providers/openai'
+import { streamResponses } from './providers/responses'
 
-type Provider = 'mock' | 'openai'
+type Provider = 'mock' | 'responses'
 
 function getProvider(): Provider {
-  return (import.meta.env.VITE_LLM_PROVIDER as Provider) || 'mock'
+  return (import.meta.env.VITE_LLM_PROVIDER as Provider) || 'responses'
 }
 
 export interface StreamChatOptions {
@@ -20,7 +20,7 @@ export async function* streamChat(
   if (signal?.aborted) return
 
   const provider = getProvider()
-  const stream = provider === 'openai' ? streamOpenAI : streamMock
+  const stream = provider === 'mock' ? streamMock : streamResponses
 
   yield* stream(messages, signal, options)
 }

@@ -7,10 +7,8 @@ from app.config import LLM_BASE_URL, LLM_API_KEY
 router = APIRouter(prefix="/api/llm")
 
 
-@router.post("/chat/completions")
-async def chat_completions(request: Request):
-    body = await request.body()
-    upstream_url = f"{LLM_BASE_URL}/chat/completions"
+async def _proxy_to_upstream(upstream_path: str, body: bytes):
+    upstream_url = f"{LLM_BASE_URL}{upstream_path}"
     headers = {"Content-Type": "application/json"}
     if LLM_API_KEY:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
@@ -36,11 +34,10 @@ async def chat_completions(request: Request):
     if is_stream:
         async def event_generator():
             try:
-                async for chunk in upstream.aiter_bytes():
+                async for chunk in upstream.aiter_bytes(chunk_size=1024):
                     yield chunk
-            except Exception:
-                # Client disconnected or upstream error during streaming; silently stop
-                pass
+            except Exception as e:
+                print(f"[proxy] Stream error: {e}")
             finally:
                 await upstream.aclose()
 
@@ -49,3 +46,15 @@ async def chat_completions(request: Request):
         data = await upstream.aread()
         await upstream.aclose()
         return Response(content=data, media_type="application/json")
+
+
+@router.post("/chat/completions")
+async def chat_completions(request: Request):
+    body = await request.body()
+    return await _proxy_to_upstream("/chat/completions", body)
+
+
+@router.post("/responses")
+async def responses(request: Request):
+    body = await request.body()
+    return await _proxy_to_upstream("/responses", body)
