@@ -1,19 +1,24 @@
-import { useEffect, useRef } from 'react'
 import type { AgentProgress } from '../agent/types'
 
 interface AgentProgressProps {
   progress: AgentProgress
 }
 
+// 对话流内的实时进度块：由 MessageList 渲染在消息末尾，结束后随 isStreaming 卸载，
+// 已完成轮次的思考过程沉淀在 assistant 消息里（Message.reasoning）持久展示
 export function AgentProgress({ progress }: AgentProgressProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [progress.steps])
-
   return (
-    <div style={{ padding: '8px 16px', fontSize: 13, color: '#666', maxHeight: 200, overflowY: 'auto' }}>
+    <div
+      style={{
+        alignSelf: 'flex-start',
+        maxWidth: '75%',
+        padding: '10px 14px',
+        borderRadius: 12,
+        backgroundColor: '#f0f0f0',
+        fontSize: 13,
+        color: '#666',
+      }}
+    >
       {progress.steps.map((step, i) => (
         <div key={i} style={{ marginBottom: 4 }}>
           {step.status === 'thinking' && (
@@ -43,10 +48,6 @@ export function AgentProgress({ progress }: AgentProgressProps) {
           )}
         </div>
       ))}
-      {progress.finished && (
-        <div style={{ fontWeight: 'bold', color: '#333' }}>生成完成</div>
-      )}
-      <div ref={bottomRef} />
     </div>
   )
 }

@@ -78,7 +78,11 @@ export async function runAgentLoop(
 
       // No tool calls → model finished autonomously
       if (!toolCalls || toolCalls.length === 0) {
-        allMessages.push({ role: 'assistant', content: roundText })
+        allMessages.push({
+          role: 'assistant',
+          content: roundText,
+          ...(step.reasoningText ? { reasoning: step.reasoningText } : {}),
+        })
         step.status = 'done'
         emitProgress()
         break
@@ -94,7 +98,12 @@ export async function runAgentLoop(
       emitProgress()
 
       // Append assistant message with tool_calls
-      allMessages.push({ role: 'assistant', content: roundText, tool_calls: toolCalls })
+      allMessages.push({
+        role: 'assistant',
+        content: roundText,
+        tool_calls: toolCalls,
+        ...(step.reasoningText ? { reasoning: step.reasoningText } : {}),
+      })
 
       // Execute each tool and append results
       for (let i = 0; i < toolCalls.length; i++) {

@@ -45,11 +45,13 @@ system 提示词每轮重建，末尾追加当前文件清单（路径 + 字符�
 
 设计文档 12.1：一条大 tool_result 就能触发硬截断。read_file 输出上限 8000 字符，超出部分截断并注明 `[已截断，共 N 字符]`。写文件走 write_file 的参数（工作区已有全文），历史里无需保留。
 
-### reasoning 折叠面板
+### reasoning 折叠面板（对话流内）
 
 - `StreamChunk` 增加 `reasoning?: string`；responses.ts 对 `response.reasoning_text.delta` yield reasoning（不再直接丢弃）
 - `AgentProgressStep` 增加 `reasoningText`；runAgentLoop 累加
-- AgentProgress 每轮下方用 `<details>` 折叠展示思考过程，默认收起，不干扰主视图
+- 流式期间：实时进度块（含各轮思考过程、工具执行状态）作为对话流内最后一个助手气泡，由 MessageList 渲染在消息末尾，随对话滚动——不挂在输入栏上方
+- 结束后：思考过程随 assistant 消息持久化（`Message.reasoning`），在对话气泡内用 `<details>` 折叠展示，可随时回看；工具 chip、思考过程、正文在同一气泡内共同渲染
+- `Message.reasoning` 仅用于展示：`toResponsesInput` 显式构造请求项，不会把该字段发给 LLM
 
 ### 截断只影响 LLM payload
 

@@ -1,11 +1,12 @@
 import { useRef, useEffect } from 'react'
 import { useChatStore } from '../store/chatStore'
+import { AgentProgress } from './AgentProgress'
 import type { Message } from '../llm/types'
 
 function isDisplayable(msg: Message): boolean {
   if (msg.role === 'system' || msg.role === 'tool') return false
   if (msg.role === 'user') return true
-  return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0
+  return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0 || !!msg.reasoning
 }
 
 function ToolCallSummary({ toolCalls }: { toolCalls: NonNullable<Message['tool_calls']> }) {
@@ -29,13 +30,24 @@ function ToolCallSummary({ toolCalls }: { toolCalls: NonNullable<Message['tool_c
   )
 }
 
+function ReasoningDetails({ reasoning, hasContent }: { reasoning: string; hasContent: boolean }) {
+  return (
+    <details style={{ marginBottom: hasContent ? 6 : 0, color: '#999' }}>
+      <summary style={{ cursor: 'pointer', fontSize: 12 }}>思考过程</summary>
+      <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4 }}>{reasoning}</div>
+    </details>
+  )
+}
+
 export function MessageList() {
   const messages = useChatStore((s) => s.messages)
+  const isStreaming = useChatStore((s) => s.isStreaming)
+  const progress = useChatStore((s) => s.progress)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, progress])
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -59,9 +71,14 @@ export function MessageList() {
             lineHeight: 1.5,
           }}
         >
-          {msg.content || (msg.tool_calls?.length ? <ToolCallSummary toolCalls={msg.tool_calls} /> : '')}
+          {msg.role === 'assistant' && msg.tool_calls?.length ? (
+            <ToolCallSummary toolCalls={msg.tool_calls} />
+          ) : null}
+          {msg.reasoning && <ReasoningDetails reasoning={msg.reasoning} hasContent={!!msg.content} />}
+          {msg.content}
         </div>
       ))}
+      {isStreaming && progress && <AgentProgress progress={progress} />}
       <div ref={bottomRef} />
     </div>
   )
