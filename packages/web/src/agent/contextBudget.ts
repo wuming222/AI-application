@@ -28,9 +28,12 @@ type Group =
   | { kind: 'plain'; msgs: Message[] }
   | { kind: 'toolRound'; msgs: Message[] }
 
+const IMAGE_CHAR_EQUIVALENT = 3000
+
 function messageChars(m: Message): number {
   let n = m.content.length
   if (m.tool_calls) n += JSON.stringify(m.tool_calls).length
+  if (m.images) n += m.images.length * IMAGE_CHAR_EQUIVALENT
   return n
 }
 

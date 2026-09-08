@@ -28,6 +28,7 @@ def init_db() -> None:
             session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
             role TEXT NOT NULL,
             content TEXT NOT NULL DEFAULT '',
+            images TEXT,
             tool_calls TEXT,
             tool_call_id TEXT,
             reasoning TEXT,
@@ -41,4 +42,8 @@ def init_db() -> None:
             files TEXT NOT NULL DEFAULT '{}'
         );
     """)
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN images TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.close()
