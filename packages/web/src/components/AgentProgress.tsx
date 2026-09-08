@@ -4,8 +4,8 @@ interface AgentProgressProps {
   progress: AgentProgress
 }
 
-// 对话流内的实时进度块：由 MessageList 渲染在消息末尾，结束后随 isStreaming 卸载，
-// 已完成轮次的思考过程沉淀在 assistant 消息里（Message.reasoning）持久展示
+// 对话流内的实时进度块：由 MessageList 渲染在消息末尾，结束后随 isStreaming 卸载。
+// 模型思考过程全程不展示（用户决策），reasoning 仍在数据层采集便于调试
 export function AgentProgress({ progress }: AgentProgressProps) {
   return (
     <div
@@ -23,14 +23,6 @@ export function AgentProgress({ progress }: AgentProgressProps) {
         <div key={i} style={{ marginBottom: 4 }}>
           {step.status === 'thinking' && (
             <span>第 {step.round} 轮思考中...</span>
-          )}
-          {step.reasoningText && (
-            <details style={{ marginLeft: 16, color: '#999' }}>
-              <summary style={{ cursor: 'pointer', fontSize: 12 }}>思考过程</summary>
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4 }}>
-                {step.reasoningText}
-              </div>
-            </details>
           )}
           {step.status === 'tool-call' && step.toolCalls && (
             <div>

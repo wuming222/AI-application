@@ -45,13 +45,13 @@ system 提示词每轮重建，末尾追加当前文件清单（路径 + 字符�
 
 设计文档 12.1：一条大 tool_result 就能触发硬截断。read_file 输出上限 8000 字符，超出部分截断并注明 `[已截断，共 N 字符]`。写文件走 write_file 的参数（工作区已有全文），历史里无需保留。
 
-### reasoning 折叠面板（对话流内）
+### reasoning 数据链路（UI 全程不展示）
 
 - `StreamChunk` 增加 `reasoning?: string`；responses.ts 对 `response.reasoning_text.delta` yield reasoning（不再直接丢弃）
 - `AgentProgressStep` 增加 `reasoningText`；runAgentLoop 累加
-- 流式期间：实时进度块（含各轮思考过程、工具执行状态）作为对话流内最后一个助手气泡，由 MessageList 渲染在消息末尾，随对话滚动——不挂在输入栏上方
+- 流式期间：实时进度块作为对话流内最后一个助手气泡，由 MessageList 渲染在消息末尾，随对话滚动——只显示轮次状态（思考中 / 执行工具 / 完成），不显示思考内容
 - 结束后：最终回复单独成气泡。一次任务的多轮工具调用在 MessageList 渲染层合并为一个气泡：一级头部显式执行次数（"🔧 执行工具 N 次"，可折叠、默认展开），二级为每个工具的可折叠行，展开即该工具的执行过程（入参 + 结果，长文本截断展示）；工具气泡内不单独展示模型思考。所有展开内容限高 220px 内部滚动，展开时 scrollIntoView(nearest) 保持点击行在视野内——避免在对话底部展开时列表被大幅顶起。store 消息结构保持 LLM 原始历史不变，分组只发生在渲染层
-- 最终决策（用户确认）：**完成后不在对话流展示任何思考过程**——回答气泡不渲染 `Message.reasoning`，仅流式期间可在进度块中实时看到。数据层仍采集与持久化 reasoning（`Message.reasoning` 保留在 store，仅用于调试与后续可能的功能），`toResponsesInput` 显式构造请求项，不会把该字段发给 LLM。曾评估在源头关闭思考（Responses API `reasoning.effort: "none"`，curl 实测可关闭且与 web_search 工具共存，每轮省约 600 reasoning tokens），因文档建议配合内置工具的复杂任务开启思考、可能影响应用生成的规划质量而放弃
+- 最终决策（用户确认，两步收敛）：**思考过程全程不展示**——流式进度块与完成后的回答气泡均不渲染思考内容。数据层仍采集与持久化 reasoning（`Message.reasoning` 保留在 store，仅用于调试与后续可能的功能），`toResponsesInput` 显式构造请求项，不会把该字段发给 LLM。曾评估在源头关闭思考（Responses API `reasoning.effort: "none"`，curl 实测可关闭且与 web_search 工具共存，每轮省约 600 reasoning tokens），因文档建议配合内置工具的复杂任务开启思考、可能影响应用生成的规划质量而放弃
 
 ### 截断只影响 LLM payload
 
