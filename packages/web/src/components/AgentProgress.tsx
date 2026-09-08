@@ -19,6 +19,14 @@ export function AgentProgress({ progress }: AgentProgressProps) {
           {step.status === 'thinking' && (
             <span>第 {step.round} 轮思考中...</span>
           )}
+          {step.reasoningText && (
+            <details style={{ marginLeft: 16, color: '#999' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12 }}>思考过程</summary>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4 }}>
+                {step.reasoningText}
+              </div>
+            </details>
+          )}
           {step.status === 'tool-call' && step.toolCalls && (
             <div>
               <span>第 {step.round} 轮执行工具:</span>

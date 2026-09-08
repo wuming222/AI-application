@@ -21,4 +21,5 @@ export interface StreamChunk {
   delta: string
   done: boolean
   tool_calls?: ToolCall[]
+  reasoning?: string
 }

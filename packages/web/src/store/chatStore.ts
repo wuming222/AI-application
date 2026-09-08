@@ -34,7 +34,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const signal = abortController.signal
 
     try {
-      const allMessages = get().messages.filter((m) => m.content !== '')
+      // 空 content 的 assistant 消息承载 tool_calls，过滤会拆散 tool 配对；由 provider 层转换时处理
+      const allMessages = get().messages
 
       const result = await runAgentLoop(allMessages, {
         signal,
