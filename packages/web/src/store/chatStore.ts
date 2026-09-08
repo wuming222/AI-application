@@ -10,7 +10,7 @@ interface ChatState {
   messages: Message[]
   isStreaming: boolean
   progress: AgentProgress | null
-  sendMessage: (text: string) => void
+  sendMessage: (text: string, images?: string[]) => void
   abort: () => void
   loadSession: (sessionId: string) => Promise<void>
   initFirstSession: () => Promise<void>
@@ -53,14 +53,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().loadSession(sessionId)
   },
 
-  sendMessage: async (text: string) => {
+  sendMessage: async (text: string, images?: string[]) => {
     const trimmed = text.trim()
-    if (!trimmed || get().isStreaming) return
+    if ((!trimmed && !images?.length) || get().isStreaming) return
 
     const sessionId = useSessionStore.getState().currentSessionId
     if (!sessionId) return
 
-    const userMsg: Message = { role: 'user', content: trimmed }
+    const userMsg: Message = { role: 'user', content: trimmed, ...(images?.length ? { images } : {}) }
     const prevCount = get().messages.length
 
     set((s) => ({

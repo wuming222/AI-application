@@ -164,6 +164,15 @@ export function MessageList() {
             }}
           >
             {item.msg.content}
+            {item.msg.images && item.msg.images.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {item.msg.images.map((src, j) => (
+                  <img key={j} src={src} alt="" style={{
+                    maxWidth: 120, maxHeight: 120, borderRadius: 6, border: '1px solid rgba(255,255,255,0.3)',
+                  }} />
+                ))}
+              </div>
+            )}
           </div>
         ),
       )}

@@ -118,3 +118,26 @@ registry.register(
     execute: (args) => useWorkspaceStore.getState().deleteFile(args.path as string),
   },
 )
+
+registry.register(
+  {
+    name: 'edit_file',
+    description:
+      '对文件执行局部文本替换。提供要被替换的旧文本(oldString)和替换后的新文本(newString)，oldString 必须在文件中唯一出现。修改前先 read_file 确认当前内容。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '文件路径' },
+        oldString: { type: 'string', description: '要被替换的旧文本，必须在文件中唯一出现' },
+        newString: { type: 'string', description: '替换后的新文本' },
+      },
+      required: ['path', 'oldString', 'newString'],
+    },
+  },
+  {
+    execute: (args) =>
+      useWorkspaceStore
+        .getState()
+        .editFile(args.path as string, args.oldString as string, args.newString as string),
+  },
+)

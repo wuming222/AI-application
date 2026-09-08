@@ -14,9 +14,28 @@ export function toResponsesInput(messages: Message[]): Record<string, unknown>[]
     if (msg.role === 'system') continue
 
     if (msg.role === 'user') {
+      const hasImages = msg.images && msg.images.length > 0
       if (!systemInjected && systemText) {
-        input.push({ role: 'user', content: `${systemText}\n\n${msg.content}` })
+        if (hasImages) {
+          const content: Record<string, unknown>[] = [
+            { type: 'input_text', text: `${systemText}\n\n${msg.content}` },
+          ]
+          for (const img of msg.images!) {
+            content.push({ type: 'input_image', image_url: img })
+          }
+          input.push({ role: 'user', content })
+        } else {
+          input.push({ role: 'user', content: `${systemText}\n\n${msg.content}` })
+        }
         systemInjected = true
+      } else if (hasImages) {
+        const content: Record<string, unknown>[] = [
+          { type: 'input_text', text: msg.content },
+        ]
+        for (const img of msg.images!) {
+          content.push({ type: 'input_image', image_url: img })
+        }
+        input.push({ role: 'user', content })
       } else {
         input.push({ role: 'user', content: msg.content })
       }

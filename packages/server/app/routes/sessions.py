@@ -22,6 +22,7 @@ class SessionUpdate(BaseModel):
 class MessageCreate(BaseModel):
     role: str
     content: str = ""
+    images: Optional[list[str]] = None
     tool_calls: Optional[list] = None
     tool_call_id: Optional[str] = None
     reasoning: Optional[str] = None
@@ -97,7 +98,7 @@ def delete_session(session_id: str):
 def get_messages(session_id: str):
     conn = get_connection()
     rows = conn.execute(
-        "SELECT role, content, tool_calls, tool_call_id, reasoning, created_at "
+        "SELECT role, content, images, tool_calls, tool_call_id, reasoning, created_at "
         "FROM messages WHERE session_id = ? ORDER BY id ASC",
         (session_id,),
     ).fetchall()
@@ -108,6 +109,8 @@ def get_messages(session_id: str):
             "role": r["role"],
             "content": r["content"],
         }
+        if r["images"]:
+            msg["images"] = json.loads(r["images"])
         if r["tool_calls"]:
             msg["tool_calls"] = json.loads(r["tool_calls"])
         if r["tool_call_id"]:
@@ -130,10 +133,11 @@ def add_messages(session_id: str, messages: list[MessageCreate]):
 
     for msg in messages:
         tc_json = json.dumps(msg.tool_calls) if msg.tool_calls else None
+        images_json = json.dumps(msg.images) if msg.images else None
         conn.execute(
-            "INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, reasoning, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (session_id, msg.role, msg.content, tc_json, msg.tool_call_id, msg.reasoning, now),
+            "INSERT INTO messages (session_id, role, content, images, tool_calls, tool_call_id, reasoning, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, msg.role, msg.content, images_json, tc_json, msg.tool_call_id, msg.reasoning, now),
         )
     conn.execute(
         "UPDATE sessions SET updated_at = ? WHERE id = ?",
