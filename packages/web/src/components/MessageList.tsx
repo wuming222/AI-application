@@ -1,7 +1,17 @@
 import { Fragment, useRef, useEffect } from 'react'
+import type { SyntheticEvent } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { AgentProgress } from './AgentProgress'
 import type { Message, ToolCall } from '../llm/types'
+
+// 展开内容限高内部滚动，避免在对话底部展开时大幅撑高列表、把点击行顶出视野
+const EXPAND_MAX_HEIGHT = 220
+
+function toggleIntoView(e: SyntheticEvent<HTMLDetailsElement>) {
+  if (e.currentTarget.open) {
+    e.currentTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+}
 
 function isDisplayable(msg: Message): boolean {
   if (msg.role === 'system' || msg.role === 'tool') return false
@@ -38,12 +48,22 @@ function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
     // malformed args — show tool name only
   }
   return (
-    <details style={{ marginLeft: 16, marginBottom: 2 }}>
+    <details onToggle={toggleIntoView} style={{ marginLeft: 16, marginBottom: 2 }}>
       <summary style={{ cursor: 'pointer', fontSize: 13 }}>
         🔧 {tc.function.name}
         {path && `: ${path}`}
       </summary>
-      <div style={{ marginLeft: 16, fontSize: 12, color: '#666', whiteSpace: 'pre-wrap', marginTop: 4 }}>
+      <div
+        style={{
+          marginLeft: 16,
+          fontSize: 12,
+          color: '#666',
+          whiteSpace: 'pre-wrap',
+          marginTop: 4,
+          maxHeight: EXPAND_MAX_HEIGHT,
+          overflowY: 'auto',
+        }}
+      >
         <div>入参：{prettyArgs(tc.function.arguments)}</div>
         <div style={{ marginTop: 4 }}>结果：{result === undefined ? '（无返回）' : capText(result, 1000)}</div>
       </div>
@@ -53,9 +73,11 @@ function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
 
 function ReasoningDetails({ reasoning, hasContent }: { reasoning: string; hasContent: boolean }) {
   return (
-    <details style={{ marginBottom: hasContent ? 6 : 0, color: '#999' }}>
+    <details onToggle={toggleIntoView} style={{ marginBottom: hasContent ? 6 : 0, color: '#999' }}>
       <summary style={{ cursor: 'pointer', fontSize: 12 }}>思考过程</summary>
-      <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4 }}>{reasoning}</div>
+      <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4, maxHeight: EXPAND_MAX_HEIGHT, overflowY: 'auto' }}>
+        {reasoning}
+      </div>
     </details>
   )
 }
