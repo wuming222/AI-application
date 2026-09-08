@@ -48,14 +48,13 @@ function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
     // malformed args — show tool name only
   }
   return (
-    <details onToggle={toggleIntoView} style={{ marginLeft: 16, marginBottom: 2 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+    <details onToggle={toggleIntoView} style={{ marginBottom: 2 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 13, listStyle: 'none' }}>
         🔧 {tc.function.name}
         {path && `: ${path}`}
       </summary>
       <div
         style={{
-          marginLeft: 16,
           fontSize: 12,
           color: '#666',
           whiteSpace: 'pre-wrap',
@@ -99,7 +98,7 @@ function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: 
         maxWidth: '75%',
         padding: '10px 14px',
         borderRadius: 12,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#fff',
         color: '#333',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
@@ -107,7 +106,7 @@ function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: 
       }}
     >
       <details open>
-        <summary style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, cursor: 'pointer' }}>
+        <summary style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, cursor: 'pointer', listStyle: 'none' }}>
           🔧 执行工具 {totalCalls} 次
         </summary>
         {msgs.map((m, i) => (
