@@ -1,5 +1,33 @@
 import { useRef, useEffect } from 'react'
 import { useChatStore } from '../store/chatStore'
+import type { Message } from '../llm/types'
+
+function isDisplayable(msg: Message): boolean {
+  if (msg.role === 'system' || msg.role === 'tool') return false
+  if (msg.role === 'user') return true
+  return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0
+}
+
+function ToolCallSummary({ toolCalls }: { toolCalls: NonNullable<Message['tool_calls']> }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+      {toolCalls.map((tc, i) => {
+        let path = ''
+        try {
+          path = (JSON.parse(tc.function.arguments) as { path?: string }).path ?? ''
+        } catch {
+          // malformed args — show tool name only
+        }
+        return (
+          <span key={tc.id || i}>
+            🔧 {tc.function.name}
+            {path && `: ${path}`}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
 
 export function MessageList() {
   const messages = useChatStore((s) => s.messages)
@@ -16,7 +44,7 @@ export function MessageList() {
           发送一条消息开始对话
         </div>
       )}
-      {messages.map((msg, i) => (
+      {messages.filter(isDisplayable).map((msg, i) => (
         <div
           key={i}
           style={{
@@ -31,7 +59,7 @@ export function MessageList() {
             lineHeight: 1.5,
           }}
         >
-          {msg.content || (msg.role === 'assistant' ? '...' : '')}
+          {msg.content || (msg.tool_calls?.length ? <ToolCallSummary toolCalls={msg.tool_calls} /> : '')}
         </div>
       ))}
       <div ref={bottomRef} />
