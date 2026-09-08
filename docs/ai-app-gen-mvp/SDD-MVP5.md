@@ -50,7 +50,7 @@ system 提示词每轮重建，末尾追加当前文件清单（路径 + 字符�
 - `StreamChunk` 增加 `reasoning?: string`；responses.ts 对 `response.reasoning_text.delta` yield reasoning（不再直接丢弃）
 - `AgentProgressStep` 增加 `reasoningText`；runAgentLoop 累加
 - 流式期间：实时进度块（含各轮思考过程、工具执行状态）作为对话流内最后一个助手气泡，由 MessageList 渲染在消息末尾，随对话滚动——不挂在输入栏上方
-- 结束后：思考过程随 assistant 消息持久化（`Message.reasoning`）。一次任务的多轮工具调用在 MessageList 渲染层合并为一个气泡，头部显式执行次数（"🔧 执行工具 N 次"），各轮思考过程合并为该气泡内的折叠项；最终回复单独成气泡，思考过程在气泡内可展开回看。store 消息结构保持 LLM 原始历史不变，分组只发生在渲染层
+- 结束后：最终回复单独成气泡，思考过程（`Message.reasoning`）在气泡内可展开回看。一次任务的多轮工具调用在 MessageList 渲染层合并为一个气泡：一级头部显式执行次数（"🔧 执行工具 N 次"），二级为每个工具的可折叠行，展开即该工具的执行过程（入参 + 结果，长文本截断展示）；工具气泡内不单独展示模型思考。store 消息结构保持 LLM 原始历史不变，分组只发生在渲染层
 - `Message.reasoning` 仅用于展示：`toResponsesInput` 显式构造请求项，不会把该字段发给 LLM
 
 ### 截断只影响 LLM payload

@@ -1,7 +1,7 @@
 import { Fragment, useRef, useEffect } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { AgentProgress } from './AgentProgress'
-import type { Message } from '../llm/types'
+import type { Message, ToolCall } from '../llm/types'
 
 function isDisplayable(msg: Message): boolean {
   if (msg.role === 'system' || msg.role === 'tool') return false
@@ -9,24 +9,45 @@ function isDisplayable(msg: Message): boolean {
   return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0 || !!msg.reasoning
 }
 
-function ToolCallSummary({ toolCalls }: { toolCalls: NonNullable<Message['tool_calls']> }) {
+// 展示用的字符串截断，避免大参数/大结果撑爆气泡
+function capText(s: string, cap: number): string {
+  return s.length > cap ? s.slice(0, cap) + `…（共 ${s.length} 字符）` : s
+}
+
+function prettyArgs(argsJson: string): string {
+  try {
+    const obj = JSON.parse(argsJson) as Record<string, unknown>
+    if (obj && typeof obj === 'object') {
+      const summarized = Object.fromEntries(
+        Object.entries(obj).map(([k, v]) => [k, typeof v === 'string' ? capText(v, 300) : v]),
+      )
+      return JSON.stringify(summarized, null, 2)
+    }
+    return argsJson
+  } catch {
+    return capText(argsJson, 300)
+  }
+}
+
+// 三级结构：二级=工具行（summary），三级=入参与执行结果
+function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
+  let path = ''
+  try {
+    path = (JSON.parse(tc.function.arguments) as { path?: string }).path ?? ''
+  } catch {
+    // malformed args — show tool name only
+  }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
-      {toolCalls.map((tc, i) => {
-        let path = ''
-        try {
-          path = (JSON.parse(tc.function.arguments) as { path?: string }).path ?? ''
-        } catch {
-          // malformed args — show tool name only
-        }
-        return (
-          <span key={tc.id || i}>
-            🔧 {tc.function.name}
-            {path && `: ${path}`}
-          </span>
-        )
-      })}
-    </div>
+    <details style={{ marginLeft: 16, marginBottom: 2 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+        🔧 {tc.function.name}
+        {path && `: ${path}`}
+      </summary>
+      <div style={{ marginLeft: 16, fontSize: 12, color: '#666', whiteSpace: 'pre-wrap', marginTop: 4 }}>
+        <div>入参：{prettyArgs(tc.function.arguments)}</div>
+        <div style={{ marginTop: 4 }}>结果：{result === undefined ? '（无返回）' : capText(result, 1000)}</div>
+      </div>
+    </details>
   )
 }
 
@@ -58,12 +79,8 @@ function buildItems(messages: Message[]): Item[] {
   return items
 }
 
-function ToolGroupBubble({ msgs }: { msgs: Message[] }) {
+function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: Map<string, string> }) {
   const totalCalls = msgs.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)
-  const combinedReasoning = msgs
-    .map((m) => m.reasoning)
-    .filter(Boolean)
-    .join('\n\n')
   return (
     <div
       style={{
@@ -82,10 +99,11 @@ function ToolGroupBubble({ msgs }: { msgs: Message[] }) {
       {msgs.map((m, i) => (
         <Fragment key={i}>
           {m.content && <div style={{ marginBottom: 4 }}>{m.content}</div>}
-          <ToolCallSummary toolCalls={m.tool_calls!} />
+          {m.tool_calls!.map((tc, j) => (
+            <ToolItem key={tc.id || j} tc={tc} result={toolResults.get(tc.id)} />
+          ))}
         </Fragment>
       ))}
-      {combinedReasoning && <ReasoningDetails reasoning={combinedReasoning} hasContent={false} />}
     </div>
   )
 }
@@ -100,6 +118,12 @@ export function MessageList() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, progress])
 
+  const toolResults = new Map(
+    messages
+      .filter((m) => m.role === 'tool' && m.tool_call_id)
+      .map((m) => [m.tool_call_id as string, m.content]),
+  )
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {messages.length === 0 && (
@@ -109,7 +133,7 @@ export function MessageList() {
       )}
       {buildItems(messages).map((item, i) =>
         item.type === 'toolGroup' ? (
-          <ToolGroupBubble key={i} msgs={item.msgs} />
+          <ToolGroupBubble key={i} msgs={item.msgs} toolResults={toolResults} />
         ) : (
           <div
             key={i}
