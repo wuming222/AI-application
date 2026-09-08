@@ -78,5 +78,5 @@ export function buildSrcdoc(files: Record<string, string>): string | null {
 }
 
 export function getPreviewSrcdoc(): string | null {
-  return buildSrcdoc(useWorkspaceStore.getState().files)
+  return buildSrcdoc(useWorkspaceStore.getState().getCurrentFiles())
 }
