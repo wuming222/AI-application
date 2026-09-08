@@ -3,7 +3,9 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 import { buildSrcdoc } from '../preview/buildSrcdoc'
 
 export function PreviewArea() {
-  const files = useWorkspaceStore((s) => s.files)
+  const filesBySession = useWorkspaceStore((s) => s.filesBySession)
+  const currentSessionId = useWorkspaceStore((s) => s.currentSessionId)
+  const files = currentSessionId ? (filesBySession[currentSessionId] ?? {}) : {}
   const [manualKey, setManualKey] = useState(0)
   const srcdoc = useMemo(() => buildSrcdoc(files), [files])
 
