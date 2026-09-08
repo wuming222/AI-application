@@ -16,7 +16,7 @@ function toggleIntoView(e: SyntheticEvent<HTMLDetailsElement>) {
 function isDisplayable(msg: Message): boolean {
   if (msg.role === 'system' || msg.role === 'tool') return false
   if (msg.role === 'user') return true
-  return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0 || !!msg.reasoning
+  return msg.content !== '' || (msg.tool_calls?.length ?? 0) > 0
 }
 
 // 展示用的字符串截断，避免大参数/大结果撑爆气泡
@@ -66,17 +66,6 @@ function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
       >
         <div>入参：{prettyArgs(tc.function.arguments)}</div>
         <div style={{ marginTop: 4 }}>结果：{result === undefined ? '（无返回）' : capText(result, 1000)}</div>
-      </div>
-    </details>
-  )
-}
-
-function ReasoningDetails({ reasoning, hasContent }: { reasoning: string; hasContent: boolean }) {
-  return (
-    <details onToggle={toggleIntoView} style={{ marginBottom: hasContent ? 6 : 0, color: '#999' }}>
-      <summary style={{ cursor: 'pointer', fontSize: 12 }}>思考过程</summary>
-      <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 4, maxHeight: EXPAND_MAX_HEIGHT, overflowY: 'auto' }}>
-        {reasoning}
       </div>
     </details>
   )
@@ -175,9 +164,6 @@ export function MessageList() {
               lineHeight: 1.5,
             }}
           >
-            {item.msg.reasoning && (
-              <ReasoningDetails reasoning={item.msg.reasoning} hasContent={!!item.msg.content} />
-            )}
             {item.msg.content}
           </div>
         ),
