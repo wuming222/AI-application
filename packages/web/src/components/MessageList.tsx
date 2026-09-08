@@ -95,15 +95,19 @@ function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: 
         lineHeight: 1.5,
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>🔧 执行工具 {totalCalls} 次</div>
-      {msgs.map((m, i) => (
-        <Fragment key={i}>
-          {m.content && <div style={{ marginBottom: 4 }}>{m.content}</div>}
-          {m.tool_calls!.map((tc, j) => (
-            <ToolItem key={tc.id || j} tc={tc} result={toolResults.get(tc.id)} />
-          ))}
-        </Fragment>
-      ))}
+      <details open>
+        <summary style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, cursor: 'pointer' }}>
+          🔧 执行工具 {totalCalls} 次
+        </summary>
+        {msgs.map((m, i) => (
+          <Fragment key={i}>
+            {m.content && <div style={{ marginBottom: 4 }}>{m.content}</div>}
+            {m.tool_calls!.map((tc, j) => (
+              <ToolItem key={tc.id || j} tc={tc} result={toolResults.get(tc.id)} />
+            ))}
+          </Fragment>
+        ))}
+      </details>
     </div>
   )
 }
