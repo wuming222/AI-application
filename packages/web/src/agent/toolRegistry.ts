@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../llm/types'
-import { workspace } from './virtualFs'
+import { useWorkspaceStore } from '../store/workspaceStore'
 
 export interface ToolExecutor {
   execute(args: Record<string, unknown>): Promise<string> | string
@@ -55,7 +55,7 @@ registry.register(
     },
   },
   {
-    execute: (args) => workspace.writeFile(args.path as string, args.content as string),
+    execute: (args) => useWorkspaceStore.getState().writeFile(args.path as string, args.content as string),
   },
 )
 
@@ -72,7 +72,7 @@ registry.register(
     },
   },
   {
-    execute: (args) => workspace.readFile(args.path as string),
+    execute: (args) => useWorkspaceStore.getState().readFile(args.path as string),
   },
 )
 
@@ -86,7 +86,7 @@ registry.register(
     },
   },
   {
-    execute: () => workspace.listFiles(),
+    execute: () => useWorkspaceStore.getState().listFiles(),
   },
 )
 
@@ -103,6 +103,6 @@ registry.register(
     },
   },
   {
-    execute: (args) => workspace.deleteFile(args.path as string),
+    execute: (args) => useWorkspaceStore.getState().deleteFile(args.path as string),
   },
 )

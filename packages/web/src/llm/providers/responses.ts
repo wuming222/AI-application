@@ -1,6 +1,49 @@
 import type { Message, StreamChunk, ToolCall } from '../types'
 import type { StreamChatOptions } from '../router'
 
+export function toResponsesInput(messages: Message[]): Record<string, unknown>[] {
+  const systemText = messages
+    .filter((m) => m.role === 'system')
+    .map((m) => m.content)
+    .join('\n\n')
+
+  const input: Record<string, unknown>[] = []
+  let systemInjected = false
+
+  for (const msg of messages) {
+    if (msg.role === 'system') continue
+
+    if (msg.role === 'user') {
+      if (!systemInjected && systemText) {
+        input.push({ role: 'user', content: `${systemText}\n\n${msg.content}` })
+        systemInjected = true
+      } else {
+        input.push({ role: 'user', content: msg.content })
+      }
+    } else if (msg.role === 'assistant') {
+      if (msg.content) {
+        input.push({ role: 'assistant', content: msg.content })
+      }
+      for (const tc of msg.tool_calls ?? []) {
+        input.push({
+          type: 'function_call',
+          call_id: tc.id,
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        })
+      }
+    } else if (msg.role === 'tool') {
+      input.push({ type: 'function_call_output', call_id: msg.tool_call_id ?? '', output: msg.content })
+    }
+  }
+
+  if (systemText && !systemInjected) {
+    input.unshift({ role: 'user', content: systemText })
+  }
+
+  return input
+}
+
 export async function* streamResponses(
   messages: Message[],
   signal?: AbortSignal,
@@ -22,7 +65,7 @@ export async function* streamResponses(
 
   const body = {
     model,
-    input: messages,
+    input: toResponsesInput(messages),
     stream: true,
     tools,
   }
