@@ -15,10 +15,12 @@ export interface Message {
   content: string
   tool_calls?: ToolCall[]
   tool_call_id?: string
+  reasoning?: string
 }
 
 export interface StreamChunk {
   delta: string
   done: boolean
   tool_calls?: ToolCall[]
+  reasoning?: string
 }

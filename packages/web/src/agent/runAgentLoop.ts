@@ -1,6 +1,8 @@
 import type { Message, ToolCall } from '../llm/types'
 import { streamChat } from '../llm/router'
 import { registry } from './toolRegistry'
+import { truncateMessages, resolveLimits } from './contextBudget'
+import { useWorkspaceStore } from '../store/workspaceStore'
 import type { AgentLoopOptions, AgentProgress, AgentProgressStep, AgentToolCallInfo } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
@@ -13,6 +15,16 @@ const SYSTEM_PROMPT = `你是 AI 应用生成器，运行在浏览器内的虚�
 3. 不使用 fetch 或动态 import——预览环境是自包含沙箱，无法发起网络请求。
 4. 用户要求修改时，先用 read_file 或 list_files 查看现状，再用 write_file 写入完整的新版本文件。
 5. 最终回复保持简短，不要在回复里粘贴大段代码。`
+
+function buildSystemPrompt(): string {
+  const files = useWorkspaceStore.getState().files
+  const listing = Object.keys(files)
+    .sort()
+    .map((p) => `- ${p} (${files[p].length} 字符)`)
+    .join('\n')
+  const section = listing ? `\n\n当前工作区文件：\n${listing}` : '\n\n当前工作区为空。'
+  return SYSTEM_PROMPT + section
+}
 
 export async function runAgentLoop(
   messages: Message[],
@@ -30,23 +42,33 @@ export async function runAgentLoop(
       ? [...messages]
       : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages]
   const toolDefs = registry.getDefinitions()
+  const limits = resolveLimits()
 
   for (let round = 1; round <= maxRounds; round++) {
     if (signal?.aborted) break
 
     const step: AgentProgressStep = { round, thinkingText: '', status: 'thinking' }
-    steps.push({ ...step })
+    steps.push(step)
     emitProgress()
 
     try {
       let roundText = ''
       let toolCalls: ToolCall[] | undefined
 
-      for await (const chunk of streamChat(allMessages, signal, { tools: toolDefs })) {
+      // 每轮组装：system 注入最新文件清单 + 历史按两阶段截断（只影响 LLM payload，不改 store）
+      if (allMessages[0]?.role === 'system') {
+        allMessages[0].content = buildSystemPrompt()
+      }
+      const payload = truncateMessages(allMessages, limits)
+
+      for await (const chunk of streamChat(payload, signal, { tools: toolDefs })) {
         if (signal?.aborted) break
         roundText += chunk.delta
         accumulated += chunk.delta
         step.thinkingText = accumulated
+        if (chunk.reasoning) {
+          step.reasoningText = (step.reasoningText ?? '') + chunk.reasoning
+        }
         if (chunk.tool_calls) {
           toolCalls = chunk.tool_calls
         }
@@ -56,7 +78,11 @@ export async function runAgentLoop(
 
       // No tool calls → model finished autonomously
       if (!toolCalls || toolCalls.length === 0) {
-        allMessages.push({ role: 'assistant', content: roundText })
+        allMessages.push({
+          role: 'assistant',
+          content: roundText,
+          ...(step.reasoningText ? { reasoning: step.reasoningText } : {}),
+        })
         step.status = 'done'
         emitProgress()
         break
@@ -72,7 +98,12 @@ export async function runAgentLoop(
       emitProgress()
 
       // Append assistant message with tool_calls
-      allMessages.push({ role: 'assistant', content: roundText, tool_calls: toolCalls })
+      allMessages.push({
+        role: 'assistant',
+        content: roundText,
+        tool_calls: toolCalls,
+        ...(step.reasoningText ? { reasoning: step.reasoningText } : {}),
+      })
 
       // Execute each tool and append results
       for (let i = 0; i < toolCalls.length; i++) {

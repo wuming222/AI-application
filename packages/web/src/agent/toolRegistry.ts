@@ -1,6 +1,8 @@
 import type { ToolDefinition } from '../llm/types'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
+const READ_FILE_MAX_CHARS = 8000
+
 export interface ToolExecutor {
   execute(args: Record<string, unknown>): Promise<string> | string
 }
@@ -72,7 +74,17 @@ registry.register(
     },
   },
   {
-    execute: (args) => useWorkspaceStore.getState().readFile(args.path as string),
+    execute: (args) => {
+      // 单条工具结果过大可直接触发硬截断，从源头控制大小（设计文档 12.1）
+      const content = useWorkspaceStore.getState().readFile(args.path as string)
+      if (content.length > READ_FILE_MAX_CHARS) {
+        return (
+          content.slice(0, READ_FILE_MAX_CHARS) +
+          `\n...[已截断，原文件共 ${content.length} 字符]`
+        )
+      }
+      return content
+    },
   },
 )
 

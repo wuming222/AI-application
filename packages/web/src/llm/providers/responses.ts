@@ -85,7 +85,14 @@ export async function* streamResponses(
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let sawText = false
   const pendingFunctionCalls = new Map<string, ToolCall>()
+
+  const warnIfEmpty = (reason: string, extra?: unknown) => {
+    if (!sawText && pendingFunctionCalls.size === 0) {
+      console.warn(`[responses] 空响应(${reason})`, extra ?? '')
+    }
+  }
 
   while (true) {
     if (signal?.aborted) {
@@ -111,7 +118,12 @@ export async function* streamResponses(
         const event = JSON.parse(payload)
 
         if (event.type === 'response.output_text.delta' && event.delta) {
+          sawText = true
           yield { delta: event.delta, done: false }
+        }
+
+        if (event.type === 'response.reasoning_text.delta' && event.delta) {
+          yield { delta: '', done: false, reasoning: event.delta }
         }
 
         if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
@@ -135,7 +147,9 @@ export async function* streamResponses(
         }
 
         if (event.type === 'response.completed') {
+          const resp = (event.response ?? {}) as { status?: string; incomplete_details?: unknown }
           const toolCalls = Array.from(pendingFunctionCalls.values())
+          warnIfEmpty('流正常结束但无文本', { status: resp.status, incomplete_details: resp.incomplete_details })
           yield { delta: '', done: true, tool_calls: toolCalls.length > 0 ? toolCalls : undefined }
           return
         }
@@ -146,5 +160,6 @@ export async function* streamResponses(
   }
 
   const toolCalls = Array.from(pendingFunctionCalls.values())
+  warnIfEmpty('流提前中断，未收到 response.completed')
   yield { delta: '', done: true, tool_calls: toolCalls.length > 0 ? toolCalls : undefined }
 }

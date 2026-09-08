@@ -20,6 +20,7 @@ export interface AgentToolCallInfo {
 export interface AgentProgressStep {
   round: number
   thinkingText: string
+  reasoningText?: string
   status: 'thinking' | 'tool-call' | 'done'
   toolCalls?: AgentToolCallInfo[]
 }
