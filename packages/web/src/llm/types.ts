@@ -18,9 +18,15 @@ export interface Message {
   reasoning?: string
 }
 
+export interface BuiltInToolStatus {
+  name: string
+  status: 'in_progress' | 'searching' | 'completed'
+}
+
 export interface StreamChunk {
   delta: string
   done: boolean
   tool_calls?: ToolCall[]
   reasoning?: string
+  built_in_tools?: BuiltInToolStatus[]
 }

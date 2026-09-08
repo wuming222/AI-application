@@ -1,4 +1,4 @@
-import type { Message, StreamChunk, ToolCall } from '../types'
+import type { Message, StreamChunk, ToolCall, BuiltInToolStatus } from '../types'
 import type { StreamChatOptions } from '../router'
 
 export function toResponsesInput(messages: Message[]): Record<string, unknown>[] {
@@ -87,6 +87,7 @@ export async function* streamResponses(
   let buffer = ''
   let sawText = false
   const pendingFunctionCalls = new Map<string, ToolCall>()
+  const activeBuiltInTools: BuiltInToolStatus[] = []
 
   const warnIfEmpty = (reason: string, extra?: unknown) => {
     if (!sawText && pendingFunctionCalls.size === 0) {
@@ -144,6 +145,30 @@ export async function* streamResponses(
             const tc = pendingFunctionCalls.get(itemId)!
             tc.function.arguments += event.delta || ''
           }
+        }
+
+        // Built-in tool: web_search_call lifecycle events
+        if (event.type === 'response.output_item.added' && event.item?.type === 'web_search_call') {
+          activeBuiltInTools.push({ name: 'web_search', status: 'in_progress' })
+          yield { delta: '', done: false, built_in_tools: [...activeBuiltInTools] }
+        }
+
+        if (event.type === 'response.web_search_call.in_progress') {
+          const idx = activeBuiltInTools.findIndex((t) => t.name === 'web_search')
+          if (idx >= 0) activeBuiltInTools[idx].status = 'in_progress'
+          yield { delta: '', done: false, built_in_tools: [...activeBuiltInTools] }
+        }
+
+        if (event.type === 'response.web_search_call.searching') {
+          const idx = activeBuiltInTools.findIndex((t) => t.name === 'web_search')
+          if (idx >= 0) activeBuiltInTools[idx].status = 'searching'
+          yield { delta: '', done: false, built_in_tools: [...activeBuiltInTools] }
+        }
+
+        if (event.type === 'response.web_search_call.completed') {
+          const idx = activeBuiltInTools.findIndex((t) => t.name === 'web_search')
+          if (idx >= 0) activeBuiltInTools[idx].status = 'completed'
+          yield { delta: '', done: false, built_in_tools: [...activeBuiltInTools] }
         }
 
         if (event.type === 'response.completed') {

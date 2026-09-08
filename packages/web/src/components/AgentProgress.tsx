@@ -27,12 +27,16 @@ export function AgentProgress({ progress }: AgentProgressProps) {
           {step.status === 'tool-call' && step.toolCalls && (
             <div>
               <span>第 {step.round} 轮执行工具:</span>
-              {step.toolCalls.map((tc, j) => (
-                <div key={j} style={{ marginLeft: 16, color: tc.status === 'done' ? '#28a745' : '#d68910' }}>
-                  {tc.status === 'running' ? '⏳' : '✓'} {tc.name}
-                  {tc.args.path && ` (${tc.args.path})`}
-                </div>
-              ))}
+              {step.toolCalls.map((tc, j) => {
+                const isBuiltIn = tc.name === 'web_search'
+                const icon = isBuiltIn ? '🔍' : tc.status === 'running' ? '⏳' : '✓'
+                return (
+                  <div key={j} style={{ marginLeft: 16, color: tc.status === 'done' ? '#28a745' : '#d68910' }}>
+                    {icon} {tc.name}
+                    {!isBuiltIn && tc.args.path && ` (${tc.args.path})`}
+                  </div>
+                )
+              })}
             </div>
           )}
           {step.status === 'done' && (

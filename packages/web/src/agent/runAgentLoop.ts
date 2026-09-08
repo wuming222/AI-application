@@ -72,6 +72,25 @@ export async function runAgentLoop(
         if (chunk.reasoning) {
           step.reasoningText = (step.reasoningText ?? '') + chunk.reasoning
         }
+        // Built-in tool status updates (e.g. web_search) during streaming
+        if (chunk.built_in_tools && chunk.built_in_tools.length > 0) {
+          if (!step.toolCalls) {
+            step.status = 'tool-call'
+            step.toolCalls = chunk.built_in_tools.map((bt) => ({
+              name: bt.name,
+              args: {},
+              status: bt.status === 'completed' ? ('done' as const) : ('running' as const),
+            }))
+          } else {
+            // Update existing built-in tool statuses
+            for (const bt of chunk.built_in_tools) {
+              const existing = step.toolCalls.find((tc) => tc.name === bt.name)
+              if (existing) {
+                existing.status = bt.status === 'completed' ? 'done' : 'running'
+              }
+            }
+          }
+        }
         if (chunk.tool_calls) {
           toolCalls = chunk.tool_calls
         }
