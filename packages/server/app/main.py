@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.llm import router as llm_router
 from app.routes.sessions import router as sessions_router
+from app.routes.voice import router as voice_router
 from app.database import init_db
 
 app = FastAPI(title="AI App Gen Server")
@@ -18,3 +19,4 @@ app.add_middleware(
 
 app.include_router(llm_router)
 app.include_router(sessions_router)
+app.include_router(voice_router)
