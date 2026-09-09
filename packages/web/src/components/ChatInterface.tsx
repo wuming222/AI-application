@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
+import { useVoiceInput } from '../hooks/useVoiceInput'
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
@@ -8,10 +9,23 @@ export function ChatInterface() {
   const { isStreaming, sendMessage, abort } = useChatStore()
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const { state: voiceState, transcript, start: startVoice, stop: stopVoice } = useVoiceInput()
+  const lastTranscriptLen = useRef(0)
 
   useEffect(() => {
     if (!isStreaming) inputRef.current?.focus()
   }, [isStreaming])
+
+  useEffect(() => {
+    if (transcript.length > lastTranscriptLen.current) {
+      const newText = transcript.slice(lastTranscriptLen.current)
+      setInput((prev) => prev + newText)
+      lastTranscriptLen.current = transcript.length
+    }
+    if (voiceState === 'idle' && transcript.length > 0) {
+      lastTranscriptLen.current = 0
+    }
+  }, [transcript, voiceState])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,6 +49,8 @@ export function ChatInterface() {
   }
 
   const canAttach = !isStreaming && pendingImages.length < MAX_IMAGES
+  const isRecording = voiceState === 'recording'
+  const voiceDisabled = isStreaming || voiceState === 'connecting' || voiceState === 'stopping'
 
   return (
     <form onSubmit={handleSubmit} style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
@@ -77,6 +93,21 @@ export function ChatInterface() {
         }}>
           📎
         </button>
+        <button
+          type="button"
+          disabled={voiceDisabled}
+          onClick={isRecording ? stopVoice : startVoice}
+          style={{
+            border: 'none', background: 'transparent',
+            cursor: voiceDisabled ? 'default' : 'pointer',
+            fontSize: 18, padding: '4px 8px', lineHeight: 1,
+            opacity: voiceDisabled ? 0.3 : 1,
+            color: isRecording ? '#ef4444' : 'inherit',
+            animation: isRecording ? 'pulse 1s ease-in-out infinite' : 'none',
+          }}
+        >
+          🎤
+        </button>
         <input
           ref={inputRef}
           value={input}
@@ -106,6 +137,12 @@ export function ChatInterface() {
           </button>
         )}
       </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </form>
   )
 }
