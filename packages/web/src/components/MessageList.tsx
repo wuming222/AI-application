@@ -1,6 +1,8 @@
 import { Fragment, useRef, useEffect } from 'react'
-import { SyntheticEvent } from 'react'
+import type { SyntheticEvent } from 'react'
 import { Empty } from 'antd'
+import ReactMarkdown from 'react-markdown'
+import './MessageList.css'
 import { useChatStore } from '../store/chatStore'
 import { AgentProgress } from './AgentProgress'
 import type { Message, ToolCall } from '../llm/types'
@@ -167,7 +169,13 @@ export function MessageList() {
               lineHeight: 1.5,
             }}
           >
-            {item.msg.content}
+            {item.msg.role === 'user' ? (
+              item.msg.content
+            ) : (
+              <div className="message-markdown">
+                <ReactMarkdown>{item.msg.content}</ReactMarkdown>
+              </div>
+            )}
             {item.msg.images && item.msg.images.length > 0 && (
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {item.msg.images.map((src, j) => (
