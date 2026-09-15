@@ -194,3 +194,29 @@
 - [x] 处理边界：无当前会话走新建；判定只看内容不看标题；流式输出时消息数已 ≥ 1，行为与现状一致
 - [x] 复用时的反馈：`composerFocusTick` 把焦点送回输入框
 - [x] 浏览器实测：连点新建不再堆积空会话（DOM 与后端会话数都不变），已有内容的会话仍可正常新建
+
+## 捕获预览运行时错误并回灌给 Agent
+
+### 问题描述
+Agent 生成完代码就撒手了：预览里报了什么错、应用是不是根本没跑起来，前端不知道，模型更不知道。用户只能自己开 DevTools，再把错误手动复述给 AI。
+
+现状核对（本条依据）：预览链路上只有三处 catch，都不是运行时错误捕获 —— `buildSrcdoc.ts:39` 的 storage 探针（SecurityError → 内存 shim）、`chatStore.sendMessage` 的请求层 catch（网络失败提示）、`toolRegistry` 的工具错误（返回字符串给模型）。`window.onerror`、`unhandledrejection`、iframe 内的 `console.error` 一个都没接。
+
+### 期望行为
+1. 预览里出现 JS 运行时报错时，界面上看得见，而不是静默白屏
+2. 一键把错误整理成修复请求送进输入框，用户看过再发
+3. （可选，默认关）生成结束后自动带错误信息发起一轮修复
+
+### 必须解决的三个难点
+- **跨源**：预览 iframe 是 `sandbox="allow-scripts"` 不带 `allow-same-origin` 的不透明源，父页面读不到它的 `contentWindow`。只能靠注入脚本 + `parent.postMessage` 单向传回来，父侧必须校验消息来源，光看 `origin` 不够（不透明源的 origin 恒为 `"null"`）
+- **行号归因**：多个文件被内联进同一份 srcdoc，错误行号是整个文档的行号，模型按它找不到原文件。要让 stack 能归因回原始文件路径
+- **成本与循环**：错误 → 自动修 → 又报错 → 再自动修，会无上限烧 token。必须有限制与去重
+
+### 待办
+- [ ] 确认方案（见 `docs/preview-error-capture/SDD.md`）
+- [ ] 注入错误桥接脚本：捕获 error / unhandledrejection，缓冲 + postMessage
+- [ ] 行号归因到原始文件
+- [ ] 父侧接收：来源校验 + 字段收窄 + 按会话存
+- [ ] 错误条 UI 与「填入输入框」动作
+- [ ] 自动修复开关（默认关）与轮次上限
+- [ ] 去重 / 上限逻辑补单测
