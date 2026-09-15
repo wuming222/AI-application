@@ -170,6 +170,11 @@
 - [x] 空态提示"还没有生成文件"；无 index.html 时下载按钮禁用
 - [ ] 超长文件展示 —— 200k 字符截断已实现，无真实大文件可测
 
+### 同日调整
+- [x] 文件列表去掉字符数，只留路径
+- [x] 代码视图加语法高亮：`highlight.js/lib/common` 子集 + github 主题，逻辑抽到 `src/preview/highlight.ts`，按扩展名映射语言，结果 `useMemo` 缓存。原 SDD 里"不引入高亮依赖"的约束作废
+- [x] 为 `dangerouslySetInnerHTML` 的转义边界补回归测试 `src/preview/__tests__/highlight.test.ts`（这条路径的安全性完全靠 hljs 转义正文）
+
 ## 空会话下点「新建会话」不应再创建一个
 
 ### 问题描述
