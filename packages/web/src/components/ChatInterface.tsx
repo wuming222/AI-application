@@ -10,7 +10,7 @@ const { TextArea } = Input
 export function ChatInterface() {
   const [input, setInput] = useState('')
   const [pendingImages, setPendingImages] = useState<string[]>([])
-  const { isStreaming, sendMessage, abort } = useChatStore()
+  const { isStreaming, sendMessage, abort, composerFocusTick } = useChatStore()
   const inputRef = useRef<any>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { state: voiceState, transcript, start: startVoice, stop: stopVoice } = useVoiceInput()
@@ -19,6 +19,11 @@ export function ChatInterface() {
   useEffect(() => {
     if (!isStreaming) inputRef.current?.focus()
   }, [isStreaming])
+
+  // 复用当前空会话时列表没有变化，靠聚焦输入框给出反馈
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [composerFocusTick])
 
   useEffect(() => {
     if (transcript.length > lastTranscriptLen.current) {

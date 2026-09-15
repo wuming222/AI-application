@@ -15,6 +15,7 @@ interface SessionState {
   isLoading: boolean
   loadSessions: () => Promise<void>
   createSession: (title?: string) => Promise<string>
+  createOrReuseSession: () => Promise<string>
   switchSession: (id: string) => void
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, title: string) => Promise<void>
@@ -71,6 +72,22 @@ export const useSessionStore = create<SessionState>((set) => ({
     return session.id
   },
 
+  // 停在一条没有任何内容的会话上再点新建，重复建只会堆出空会话
+  createOrReuseSession: async (): Promise<string> => {
+    const { currentSessionId, createSession } = useSessionStore.getState()
+    const chat = useChatStore.getState()
+    const workspace = useWorkspaceStore.getState()
+    const loadedForCurrent =
+      !!currentSessionId &&
+      chat.messagesSessionId === currentSessionId &&
+      workspace.currentSessionId === currentSessionId
+    if (loadedForCurrent && chat.messages.length === 0 && Object.keys(workspace.getCurrentFiles()).length === 0) {
+      chat.requestComposerFocus()
+      return currentSessionId
+    }
+    return createSession()
+  },
+
   switchSession: (id: string) => {
     set({ currentSessionId: id })
     useChatStore.getState().loadSession(id)
@@ -100,7 +117,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     if (newCurrent) {
       useChatStore.getState().loadSession(newCurrent)
     } else {
-      useChatStore.setState({ messages: [] })
+      useChatStore.setState({ messages: [], messagesSessionId: null })
       useWorkspaceStore.getState().setCurrentSession('')
     }
   },
