@@ -125,7 +125,7 @@ function SortableSessionItem({
 }
 
 export function Sidebar() {
-  const { sessions, currentSessionId, isLoading, loadSessions, createSession, switchSession, deleteSession, renameSession, reorderSessions } = useSessionStore()
+  const { sessions, currentSessionId, isLoading, loadSessions, createOrReuseSession, switchSession, deleteSession, renameSession, reorderSessions } = useSessionStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
@@ -245,7 +245,7 @@ export function Sidebar() {
         <Button
           type="text"
           icon={<PlusOutlined />}
-          onClick={() => createSession()}
+          onClick={() => createOrReuseSession()}
         />
       </div>
     )
@@ -275,7 +275,7 @@ export function Sidebar() {
               type="text"
               size="small"
               icon={<PlusOutlined />}
-              onClick={() => createSession()}
+              onClick={() => createOrReuseSession()}
               title="新建会话"
             />
             <Button

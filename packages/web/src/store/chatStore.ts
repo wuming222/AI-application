@@ -11,8 +11,10 @@ interface ChatState {
   messages: Message[]
   isStreaming: boolean
   progress: AgentProgress | null
+  composerFocusTick: number
   sendMessage: (text: string, images?: string[]) => void
   abort: () => void
+  requestComposerFocus: () => void
   loadSession: (sessionId: string) => Promise<void>
   initFirstSession: () => Promise<void>
 }
@@ -23,6 +25,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
   progress: null,
+  composerFocusTick: 0,
+
+  requestComposerFocus: () => set((s) => ({ composerFocusTick: s.composerFocusTick + 1 })),
 
   loadSession: async (sessionId: string) => {
     try {
