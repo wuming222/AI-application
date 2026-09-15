@@ -245,9 +245,10 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 - P2/P3 作为长期约定：后续改到某个组件时顺手收敛，不专门开一次大改
 
 ### 待办
-- [ ] P0：规范写进 `AGENTS.md` 的编码约束
-- [ ] 预览/代码两个裸 tab → antd `Segmented`，删掉手写的 `.preview-tab` 样式
-- [ ] 刷新 / 下载 → antd `Button`
-- [ ] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`
-- [ ] 逐个判定剩余裸按钮：适合换组件的换，形态确实不匹配的（18px 圆形角标）保留原生但把样式移进 CSS，并记录为有意例外
-- [ ] 浏览器实测：控件尺寸/间距无明显回归，Segmented 切换与下载、刷新功能照旧
+- [x] P0：规范写进 `AGENTS.md` 的编码约束（样式归属 / token 取值 / 优先用组件库三条）
+- [x] 预览/代码两个裸 tab → antd `Segmented`，手写的 `.preview-tab` 四段样式已删
+- [x] 刷新 / 下载 → antd `Button`（禁用态与下载产出 Blob 均实测正常）
+- [x] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`（折叠态原本没提示，一并补上）；实测 `.ant-tooltip` 渲染、原生 `title` 已移除
+- [x] 剩余 2 个裸按钮逐个判定：文件列表行与图片移除角标有意保留原生，都已就地注明理由；角标的 inline style 收进新建的 `ChatInterface.css`
+- [x] 浏览器实测无明显尺寸回归（header 45px、Segmented 32×104px 在 280px 面板内不溢出），切视图 iframe 仍不重载
+- [ ] 图片移除角标的视觉一致性未实测 —— 要真实上传文件才会渲染出角标

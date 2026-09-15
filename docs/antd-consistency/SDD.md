@@ -36,11 +36,14 @@
 - 需要新建 `packages/web/src/components/ChatInterface.css`（该组件目前同名样式文件都没有）
 
 ## 验收标准
-- [ ] `grep -rn "<button" packages/web/src` 只剩 2 处，且都在代码里有注释说明为何保留
-- [ ] 预览/代码切换由 `Segmented` 承担，切换行为与之前一致（iframe 仍不重新加载）
-- [ ] 刷新、下载是 antd `Button`，未生成 index.html 时仍为禁用态，下载内容仍与 iframe `srcdoc` 一致
-- [ ] Sidebar 悬停新建/收起按钮出现 antd Tooltip（不再是浏览器原生 `title` 气泡）
-- [ ] 图片移除角标外观与改前一致，点击仍能移除
-- [ ] 手写 `.preview-tab*` 样式已从 CSS 删除，没有留下死规则
-- [ ] 浏览器实测三栏布局无明显尺寸回归（header 高度、按钮不撑破面板）
-- [ ] `pnpm --filter web test:run` 25/25 通过；`npx tsc -b` 不新增错误
+- [x] `grep -rn "<button" packages/web/src` 只剩 2 处（`ChatInterface.tsx:86`、`PreviewArea.tsx:101`），两处都有就近注释说明保留理由
+- [x] 预览/代码切换由 `Segmented` 承担，切换行为与之前一致（实测来回切 iframe 仍是同一 DOM 节点，代码视图 534 个高亮 span 正常）
+- [x] 刷新、下载是 antd `Button`（`.ant-btn`），未生成 index.html 时禁用，点击下载仍产出 Blob
+- [x] Sidebar 新建/收起按钮出现 antd Tooltip（实测 `.ant-tooltip` 渲染出；原生 `title` 属性已不存在）
+- [ ] 图片移除角标外观与改前一致，点击仍能移除 —— 需要真实上传文件才会渲染出角标，未实测（仅确认样式值逐条搬进 `.image-remove`，未改动数值）
+- [x] 手写 `.preview-tab*` 与 `.preview-actions button` 样式已删，无死规则
+- [x] 浏览器实测无明显尺寸回归：header 高 45px、Segmented 32×104px，在 280px 宽面板内不溢出
+- [x] `pnpm --filter web test:run` 25/25 通过；`npx tsc -b` 不新增错误
+
+## 附带发现
+antd `Button` 对两字中文标签会自动插入一个字距（渲染为「刷 新」「下 载」），是组件库既定行为，非 bug。
