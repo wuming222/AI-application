@@ -1,5 +1,8 @@
 import { Fragment, useRef, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
+import { Empty } from 'antd'
+import ReactMarkdown from 'react-markdown'
+import './MessageList.css'
 import { useChatStore } from '../store/chatStore'
 import { AgentProgress } from './AgentProgress'
 import type { Message, ToolCall } from '../llm/types'
@@ -139,10 +142,10 @@ export function MessageList() {
   )
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {messages.length === 0 && (
-        <div style={{ color: '#999', textAlign: 'center', marginTop: 40 }}>
-          发送一条消息开始对话
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 200 }}>
+          <Empty description="发送一条消息开始对话" />
         </div>
       )}
       {buildItems(messages).map((item, i) =>
@@ -151,19 +154,25 @@ export function MessageList() {
         ) : (
           <div
             key={i}
+            className={`message-bubble message-bubble-${item.msg.role}`}
             style={{
               alignSelf: item.msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '75%',
+              maxWidth: 'min(75%, 800px)',
               padding: '10px 14px',
-              borderRadius: 12,
-              backgroundColor: item.msg.role === 'user' ? '#007bff' : '#f0f0f0',
+              borderRadius: 18,
+              backgroundColor: item.msg.role === 'user' ? '#6b9fd4' : '#ffffff',
               color: item.msg.role === 'user' ? '#fff' : '#333',
+              boxShadow: item.msg.role === 'user' 
+                ? '0 2px 6px rgba(107, 159, 212, 0.2)' 
+                : '0 2px 6px rgba(0, 0, 0, 0.06)',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               lineHeight: 1.5,
             }}
           >
-            {item.msg.content}
+            <div className="message-markdown">
+              <ReactMarkdown>{item.msg.content}</ReactMarkdown>
+            </div>
             {item.msg.images && item.msg.images.length > 0 && (
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {item.msg.images.map((src, j) => (

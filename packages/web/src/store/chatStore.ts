@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { message as antdMessage } from 'antd'
 import type { Message } from '../llm/types'
 import { runAgentLoop } from '../agent/runAgentLoop'
 import type { AgentProgress } from '../agent/types'
@@ -104,6 +105,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         console.error('Agent loop error:', err)
+        antdMessage.error('请求失败，请检查网络连接后重试')
       }
     } finally {
       abortController = null

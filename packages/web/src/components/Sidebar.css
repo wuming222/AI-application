@@ -1,0 +1,62 @@
+/* Session item styles */
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.session-item.dragging {
+  opacity: 0.5;
+  background-color: rgba(107, 159, 212, 0.1);
+}
+
+/* Drag handle - visible on hover */
+.drag-handle {
+  cursor: grab;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  color: #999;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.session-item:hover .drag-handle {
+  opacity: 1;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Resize handle styles */
+.resize-handle {
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: rgba(107, 159, 212, 0.3);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.resize-handle:hover::after,
+.resize-handle.resizing::after {
+  opacity: 1;
+}
