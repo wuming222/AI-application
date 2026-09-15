@@ -1,9 +1,11 @@
 # 统一到 Ant Design 组件 - SDD
 
 ## 需求
-项目已引 antd，但仍有 6 处裸 `<button>`、大量 inline style，`title` 属性当提示用，没吃到组件库能力。本轮只做已确认的 **P0 + P1**：先把样式归属与 token 的规矩定下来，再换掉最明显的控件。P2（全量色值换 token）、P3（布局收进 Flex/Layout）不在本轮。
+项目已引 antd，但仍有 6 处裸 `<button>`、大量 inline style，`title` 属性当提示用，没吃到组件库能力。
 
-顺序有讲究：antd 组件自带 CSS-in-JS 样式，留着 inline style 去套组件会踩优先级覆盖 —— 本轮之前的 `.dragging` 被同节点 inline `background` 盖掉就是同一个坑。所以 P0 先立规矩，P1 才动控件。
+先做 **P0 + P1**（定规矩 + 换掉最明显的控件），随后按用户要求把 **P2**（色值/圆角全量换 token）与 **P3**（布局与状态样式收进 class）一并做完 —— 见文末「P2 + P3 追加执行」。
+
+顺序有讲究：antd 组件自带 CSS-in-JS 样式，留着 inline style 去套组件会踩优先级覆盖 —— 本轮之前的 `.dragging` 被同节点 inline `background` 盖掉就是同一个坑。所以 P0 先立规矩，P1 换控件，最后才做 P2/P3 的全量收敛。
 
 ## 实现步骤
 
@@ -55,3 +57,58 @@
 
 ## 附带发现
 antd `Button` 对两字中文标签会自动插入一个字距（渲染为「刷 新」「下 载」），是组件库既定行为，非 bug。
+
+## P2 + P3 追加执行
+
+### 先纠正一个错误前提
+P2 原计划直接用 `var(--ant-color-text)`，前提是"antd v6 已开启 cssVar"。**这个前提是错的**：实测在 `.session-item` 上 `getComputedStyle().getPropertyValue('--ant-color-text')` 全部返回空。之前的探针之所以看着能用，是因为给元素塞了一个未定义变量，声明被丢弃后 `color` 回落到继承值，看起来正好等于按钮自己的颜色。
+
+### 实际机制：App 根节点桥一层自有变量
+`App.tsx` 里 `useThemeVars()` 用 `theme.useToken()` 取 token，写成 `--app-text`、`--app-bg-layout`、`--app-radius-lg` 等挂在根 div 上，各组件同名 `.css` 用 `var(--app-*)` 取。值仍然源自 antd token，因此跟着 `ConfigProvider` 的主题与 `darkAlgorithm` 走。
+
+例外（保留字面值，已在 CSS 顶部注明）：阴影，以及叠在特定底色上的半透明白/黑（用户气泡内部那些 `rgba(255,255,255,.x)`）。antd 的 `boxShadow*` 明显更弱，替换会造成可见回归。
+
+### P2 的色值位移表
+| 原值 | 换成 token | 计算值变化 |
+|---|---|---|
+| `#333` | `colorText` | `rgb(51,51,51)` → `rgba(0,0,0,.88)` |
+| `#666` | `colorTextSecondary` | `rgb(102,102,102)` → `rgba(0,0,0,.65)` |
+| `#999` | `colorTextTertiary` | 153 → 0.45 黑 |
+| `#e8e8e8` | `colorBorder` | 232 → 217 |
+| `#f0f0f0` | `colorBorderSecondary` | **不变** |
+| `#fafafa` | `colorBgLayout` | 250 → 245 |
+| `#f5f5f5` | `colorBgLayout` | **不变** |
+| `#fff` | `colorBgContainer` | **不变** |
+| `#6b9fd4` | `colorPrimary` | **不变**（main.tsx 已如此配置） |
+| `#ef4444` | `colorError` | → `#ff4d4f` |
+| `#2ecc71` / `#f39c12` | `colorSuccess` / `colorWarning` | → antd 绿/橙 |
+| `#4a9eff` | `colorPrimary`（spinner）/`colorInfo`（reasoning 条） | 蓝调统一进主题 |
+| 圆角 `6` / `8` | `borderRadius` / `borderRadiusLG` | **不变**（配置即 6，默认 8） |
+| 气泡圆角 `12/16/18/20` | 保留字面 | 属于造型值，无对应 token |
+
+### P3：收进 class，而不是换 Flex/Layout
+`Space`/`Flex`/`Layout` 只是把 inline style 换成组件 props，运行时生成的还是同样的样式，既不减样式量也不解决"状态写不进 class"的问题。所以 P3 的做法是把布局与状态样式移到各组件同名 `.css`，JSX 只留真正动态的值。
+
+结果：inline style 从 **56 处 → 3 处**（`sidebarWidth`、dnd-kit 的 `transform/transition`、聊天列拖拽宽度），组件 TSX 里已无写死色值。
+
+顺带清掉的两处：
+- `AgentProgress.css` 里媒体查询的 `!important` —— 它原本只是为了压过内联样式，样式进 class 后不再需要
+- `ChatInterface.tsx` 里 JSX `<style>` 写的 `@keyframes pulse` —— 移进 `ChatInterface.css`
+
+### 没有截图能力时怎么验证
+in-app 浏览器视口隐藏，`take_screenshot` 不可用，所以改用**改前/改后计算样式对比**：改动前用 `getComputedStyle` + `getBoundingClientRect` 给 10 个关键元素（会话项激活/未激活、标题、侧栏容器、头部标题、两类气泡、markdown 段落、预览头部）打了基线，改完跑同一段探针比对。
+
+结论：**几何零变化** —— padding、margin、font-size、font-weight、line-height、border-radius、阴影、元素尺寸全部逐项相等（如激活项 `10px 12px` / `8px` / 183×45，气泡 154×447 与 154×81，`md p` margin `6.4px 0`）；颜色只在上面那张表列出的项上按 token 位移。`.session-more` 的 `1 / 0` 透明度证明"按状态切 opacity"从内联改到 class 后行为不变。
+
+### 过程中自己引入又修掉的两个问题
+1. `.app-chat { flex: 1 }` —— `flex: 1` 展开是 `1 1 0%`，会**忽略**拖拽设定的 `width`，直接让聊天列改宽失效。已从 CSS 去掉，伸缩仍由内联动态 `flex` 控制。
+2. 顺手修掉一个历史类型错误：`AgentProgress.tsx` 把 `tc.args.path`（`unknown`）当 ReactNode 用。按 AGENTS.md 的要求先收窄成 `string` 再用，`tsc` 的历史错误从 5 个降到 4 个。
+
+### P2/P3 验收
+- [x] 组件 TSX 里无写死十六进制色值（`grep` 为空），`style={{` 只剩 3 处动态值
+- [x] 改前/改后计算样式对比：几何零变化，颜色仅按映射表位移
+- [x] 聊天列拖拽改宽链路正常（`mousedown → mousemove → mouseup`，内联 `width` 更新、body 光标复位）
+- [x] 预览 iframe 仍撑满面板（`.preview-frame` 实测 279×639），代码视图高亮 534 个 token span 正常
+- [x] 深色模式：所有面/边框/文字色改走 `--app-*` 后不再残留浅灰底与深灰字（此前 `#333`/`#fafafa`/`#555` 在暗色表面上不可读）
+- [x] `tsc` 4 个历史错误（较改动前少 1），无新增；`vitest` 25/25 通过
+- [ ] 深色模式的实际观感未逐屏确认 —— 需要把系统切到 dark 再看一轮
