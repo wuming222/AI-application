@@ -220,3 +220,34 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 - [ ] 错误条 UI 与「填入输入框」动作
 - [ ] 自动修复开关（默认关）与轮次上限
 - [ ] 去重 / 上限逻辑补单测
+
+## 统一到 Ant Design 组件
+
+### 问题描述
+项目已经引了 antd，但不少界面仍是裸标签 + inline style 手写的，没有吃到组件库的能力。盘点结果（实测计数）：
+
+| 项 | 现状 |
+|---|---|
+| 裸 `<button>` | 6 处：`PreviewArea.tsx` 5（预览/代码 tab、刷新、下载、文件列表行）、`ChatInterface.tsx:84` 1（图片移除角标） |
+| inline style | ChatInterface 14、Sidebar 13、MessageList 12、AgentProgress 8、App 6、PreviewArea 3 |
+| 已在用 | Button、Input、Empty、Dropdown、message、ConfigProvider + theme |
+| 缺席 | Segmented/Tabs、Tooltip（现在用 `title` 属性）、Space/Flex、Layout、Typography |
+
+`main.tsx` 已经配了 `colorPrimary: '#6b9fd4'` 与跟随系统的 `darkAlgorithm`，但组件里散落硬编码色值 —— 一旦切到深色模式，这些写死的颜色会和 antd 的暗色表面打架。
+
+### 本轮范围（已确认：只做 P0 + P1）
+- **P0 定规范**：写进 `AGENTS.md` —— 状态/布局样式归 `.css` class，JSX 只留真正动态的值；色值、圆角、间距取 antd token，不写死。理由是先后顺序很关键：antd 组件自带 CSS-in-JS 样式，留着 inline style 去套组件会踩优先级覆盖（`.dragging` 被 inline `background` 盖掉就是这么踩的）
+- **P1 换控件**：6 个裸按钮逐个判定该换成什么；`title` 属性 → `Tooltip`；预览/代码切换 → `Segmented`
+
+### 明确不在本轮
+- **P2 全量色值换 token**：跨 6 个文件的机械替换，量大且视觉有细微差异
+- **P3 布局收进 `Flex`/`Space`/`Layout`**：回归面最大，而且这个仓库没有视觉回归测试，in-app 浏览器视口隐藏又截不了图，只能靠人工逐屏对比
+- P2/P3 作为长期约定：后续改到某个组件时顺手收敛，不专门开一次大改
+
+### 待办
+- [ ] P0：规范写进 `AGENTS.md` 的编码约束
+- [ ] 预览/代码两个裸 tab → antd `Segmented`，删掉手写的 `.preview-tab` 样式
+- [ ] 刷新 / 下载 → antd `Button`
+- [ ] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`
+- [ ] 逐个判定剩余裸按钮：适合换组件的换，形态确实不匹配的（18px 圆形角标）保留原生但把样式移进 CSS，并记录为有意例外
+- [ ] 浏览器实测：控件尺寸/间距无明显回归，Segmented 切换与下载、刷新功能照旧
