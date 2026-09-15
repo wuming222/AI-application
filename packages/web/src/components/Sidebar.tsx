@@ -8,15 +8,143 @@ import {
   EditOutlined,
   DeleteOutlined,
   MessageOutlined,
+  DragOutlined,
 } from '@ant-design/icons'
+import { DndContext, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import './Sidebar.css'
 import { useSessionStore } from '../store/sessionStore'
 import { useChatStore } from '../store/chatStore'
 
+// Sortable session item component
+function SortableSessionItem({ 
+  session, 
+  isActive, 
+  isEditing, 
+  editTitle, 
+  setEditTitle, 
+  submitRename, 
+  setEditingId, 
+  handleRename, 
+  handleDelete,
+  switchSession,
+}: any) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: session.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={() => switchSession(session.id)}
+      className="session-item"
+    >
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        style={{
+          cursor: 'grab',
+          padding: '0 4px',
+          display: 'flex',
+          alignItems: 'center',
+          color: '#999',
+        }}
+      >
+        <DragOutlined />
+      </div>
+
+      {isEditing ? (
+        <Input
+          autoFocus
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          onBlur={submitRename}
+          onKeyDown={(e) => { 
+            if (e.key === 'Enter') submitRename()
+            if (e.key === 'Escape') setEditingId(null) 
+          }}
+          onClick={(e) => e.stopPropagation()}
+          size="small"
+          style={{ flex: 1 }}
+        />
+      ) : (
+        <>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              whiteSpace: 'nowrap',
+              color: isActive ? '#333' : '#666',
+              fontWeight: isActive ? 500 : 400,
+            }}>
+              <MessageOutlined style={{ marginRight: 6, color: '#6b9fd4' }} />
+              {session.title}
+            </div>
+          </div>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'rename',
+                  label: '重命名',
+                  icon: <EditOutlined />,
+                  onClick: ({ domEvent }) => {
+                    domEvent.stopPropagation()
+                    handleRename(session.id, session.title)
+                  },
+                },
+                {
+                  key: 'delete',
+                  label: '删除',
+                  icon: <DeleteOutlined />,
+                  danger: true,
+                  onClick: ({ domEvent }) => {
+                    domEvent.stopPropagation()
+                    handleDelete(session.id)
+                  },
+                },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<MoreOutlined />}
+              onClick={(e) => e.stopPropagation()}
+              style={{ opacity: isActive ? 1 : 0 }}
+            />
+          </Dropdown>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function Sidebar() {
-  const { sessions, currentSessionId, isLoading, loadSessions, createSession, switchSession, deleteSession, renameSession } = useSessionStore()
+  const { sessions, currentSessionId, isLoading, loadSessions, createSession, switchSession, deleteSession, renameSession, reorderSessions } = useSessionStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+
+  // Setup drag sensor
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    })
+  )
 
   useEffect(() => {
     loadSessions().then(() => {
@@ -40,6 +168,17 @@ export function Sidebar() {
   const handleDelete = (id: string) => {
     deleteSession(id)
     antdMessage.success('已删除')
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) return
+
+    const oldIndex = sessions.findIndex((s) => s.id === active.id)
+    const newIndex = sessions.findIndex((s) => s.id === over.id)
+
+    reorderSessions(oldIndex, newIndex)
   }
 
   // 折叠状态
@@ -113,97 +252,48 @@ export function Sidebar() {
             <Empty description="暂无会话" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           </div>
         ) : (
-          <div style={{ padding: '0 8px' }}>
-            {sessions.map((session) => {
-              const isActive = session.id === currentSessionId
-              
-              return (
-                <div
-                  key={session.id}
-                  onClick={() => switchSession(session.id)}
-                  style={{
-                    padding: '10px 12px',
-                    marginBottom: 4,
-                    cursor: 'pointer',
-                    background: isActive ? '#ffffff' : 'transparent',
-                    borderRadius: 8,
-                    border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
-                    boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: 13,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {editingId === session.id ? (
-                    <Input
-                      autoFocus
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={submitRename}
-                      onKeyDown={(e) => { 
-                        if (e.key === 'Enter') submitRename()
-                        if (e.key === 'Escape') setEditingId(null) 
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={sessions.map((s) => s.id)}>
+              <div style={{ padding: '0 8px' }}>
+                {sessions.map((session) => {
+                  const isActive = session.id === currentSessionId
+                  
+                  return (
+                    <div
+                      key={session.id}
+                      style={{
+                        padding: '10px 12px',
+                        marginBottom: 4,
+                        cursor: 'pointer',
+                        background: isActive ? '#ffffff' : 'transparent',
+                        borderRadius: 8,
+                        border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
+                        boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 13,
+                        transition: 'all 0.2s ease',
                       }}
-                      onClick={(e) => e.stopPropagation()}
-                      size="small"
-                      style={{ flex: 1 }}
-                    />
-                  ) : (
-                    <>
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <div style={{ 
-                          overflow: 'hidden', 
-                          textOverflow: 'ellipsis', 
-                          whiteSpace: 'nowrap',
-                          color: isActive ? '#333' : '#666',
-                          fontWeight: isActive ? 500 : 400,
-                        }}>
-                          <MessageOutlined style={{ marginRight: 6, color: '#6b9fd4' }} />
-                          {session.title}
-                        </div>
-                      </div>
-                      <Dropdown
-                        menu={{
-                          items: [
-                            {
-                              key: 'rename',
-                              label: '重命名',
-                              icon: <EditOutlined />,
-                              onClick: ({ domEvent }) => {
-                                domEvent.stopPropagation()
-                                handleRename(session.id, session.title)
-                              },
-                            },
-                            {
-                              key: 'delete',
-                              label: '删除',
-                              icon: <DeleteOutlined />,
-                              danger: true,
-                              onClick: ({ domEvent }) => {
-                                domEvent.stopPropagation()
-                                handleDelete(session.id)
-                              },
-                            },
-                          ],
-                        }}
-                        trigger={['click']}
-                      >
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<MoreOutlined />}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ opacity: isActive ? 1 : 0 }}
-                        />
-                      </Dropdown>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                    >
+                      <SortableSessionItem
+                        session={session}
+                        isActive={isActive}
+                        isEditing={editingId === session.id}
+                        editTitle={editTitle}
+                        setEditTitle={setEditTitle}
+                        submitRename={submitRename}
+                        setEditingId={setEditingId}
+                        handleRename={handleRename}
+                        handleDelete={handleDelete}
+                        switchSession={switchSession}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </div>
