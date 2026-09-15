@@ -30,3 +30,33 @@
 .drag-handle:active {
   cursor: grabbing;
 }
+
+/* Resize handle styles */
+.resize-handle {
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: rgba(107, 159, 212, 0.3);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.resize-handle:hover::after,
+.resize-handle.resizing::after {
+  opacity: 1;
+}

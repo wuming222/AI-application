@@ -144,6 +144,13 @@ export function Sidebar() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  
+  // Sidebar resize state
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar-width')
+    return saved ? parseInt(saved, 10) : 260
+  })
+  const [isResizing, setIsResizing] = useState(false)
 
   // Setup drag sensor
   const sensors = useSensors(
@@ -159,6 +166,44 @@ export function Sidebar() {
       useChatStore.getState().initFirstSession()
     })
   }, [])
+
+  // Resize handlers
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }
+
+  useEffect(() => {
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      
+      const newWidth = e.clientX
+      // Clamp between 200px and 500px
+      const clampedWidth = Math.min(Math.max(newWidth, 200), 500)
+      setSidebarWidth(clampedWidth)
+    }
+
+    const handleResizeEnd = () => {
+      if (isResizing) {
+        setIsResizing(false)
+        localStorage.setItem('sidebar-width', String(sidebarWidth))
+      }
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove)
+      document.addEventListener('mouseup', handleResizeEnd)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove)
+      document.removeEventListener('mouseup', handleResizeEnd)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing, sidebarWidth])
 
   const handleRename = (id: string, currentTitle: string) => {
     setEditingId(id)
@@ -220,93 +265,111 @@ export function Sidebar() {
   }
 
   return (
-    <div style={{ 
-      width: 260, 
-      borderRight: '1px solid #f0f0f0', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      background: '#fafafa',
-    }}>
-      {/* Header */}
+    <>
       <div style={{ 
-        padding: '16px', 
-        borderBottom: '1px solid #f0f0f0', 
+        width: sidebarWidth, 
+        borderRight: '1px solid #f0f0f0', 
         display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
+        flexDirection: 'column', 
+        background: '#fafafa',
+        position: 'relative',
       }}>
-        <span style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>会话列表</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <Button
-            type="text"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => createSession()}
-            title="新建会话"
-          />
-          <Button
-            type="text"
-            size="small"
-            icon={<MenuFoldOutlined />}
-            onClick={() => setCollapsed(true)}
-            title="收起侧边栏"
-          />
-        </div>
-      </div>
-
-      {/* Session List */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-        {isLoading ? (
-          <div style={{ padding: 16, color: '#999', fontSize: 13, textAlign: 'center' }}>加载中...</div>
-        ) : sessions.length === 0 ? (
-          <div style={{ padding: '40px 16px' }}>
-            <Empty description="暂无会话" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        {/* Header */}
+        <div style={{ 
+          padding: '16px', 
+          borderBottom: '1px solid #f0f0f0', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+        }}>
+          <span style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>会话列表</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => createSession()}
+              title="新建会话"
+            />
+            <Button
+              type="text"
+              size="small"
+              icon={<MenuFoldOutlined />}
+              onClick={() => setCollapsed(true)}
+              title="收起侧边栏"
+            />
           </div>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={sessions.map((s) => s.id)}>
-              <div style={{ padding: '0 8px' }}>
-                {sessions.map((session) => {
-                  const isActive = session.id === currentSessionId
-                  
-                  return (
-                    <div
-                      key={session.id}
-                      style={{
-                        padding: '10px 12px',
-                        marginBottom: 4,
-                        cursor: 'pointer',
-                        background: isActive ? '#ffffff' : 'transparent',
-                        borderRadius: 8,
-                        border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
-                        boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: 13,
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <SortableSessionItem
-                        session={session}
-                        isActive={isActive}
-                        isEditing={editingId === session.id}
-                        editTitle={editTitle}
-                        setEditTitle={setEditTitle}
-                        submitRename={submitRename}
-                        setEditingId={setEditingId}
-                        handleRename={handleRename}
-                        handleDelete={handleDelete}
-                        switchSession={switchSession}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            </SortableContext>
-          </DndContext>
-        )}
+        </div>
+
+        {/* Session List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          {isLoading ? (
+            <div style={{ padding: 16, color: '#999', fontSize: 13, textAlign: 'center' }}>加载中...</div>
+          ) : sessions.length === 0 ? (
+            <div style={{ padding: '40px 16px' }}>
+              <Empty description="暂无会话" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </div>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={sessions.map((s) => s.id)}>
+                <div style={{ padding: '0 8px' }}>
+                  {sessions.map((session) => {
+                    const isActive = session.id === currentSessionId
+                    
+                    return (
+                      <div
+                        key={session.id}
+                        style={{
+                          padding: '10px 12px',
+                          marginBottom: 4,
+                          cursor: 'pointer',
+                          background: isActive ? '#ffffff' : 'transparent',
+                          borderRadius: 8,
+                          border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
+                          boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: 13,
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <SortableSessionItem
+                          session={session}
+                          isActive={isActive}
+                          isEditing={editingId === session.id}
+                          editTitle={editTitle}
+                          setEditTitle={setEditTitle}
+                          submitRename={submitRename}
+                          setEditingId={setEditingId}
+                          handleRename={handleRename}
+                          handleDelete={handleDelete}
+                          switchSession={switchSession}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
+
+        {/* Resize handle */}
+        <div
+          className={`resize-handle ${isResizing ? 'resizing' : ''}`}
+          onMouseDown={handleResizeStart}
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 6,
+            cursor: 'col-resize',
+            zIndex: 10,
+          }}
+        />
       </div>
-    </div>
+    </>
   )
 }
