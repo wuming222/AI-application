@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Button, Segmented } from 'antd'
 import 'highlight.js/styles/github.css'
 import { highlightCode } from '../preview/highlight'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -11,12 +12,19 @@ const EMPTY_FILES: Record<string, string> = {}
 // 超大文件只渲染前这么多字符，避免整块 DOM 卡住
 const MAX_VIEW_CHARS = 200_000
 
+type PreviewView = 'preview' | 'code'
+
+const VIEW_OPTIONS: { label: string; value: PreviewView }[] = [
+  { label: '预览', value: 'preview' },
+  { label: '代码', value: 'code' },
+]
+
 export function PreviewArea() {
   const filesBySession = useWorkspaceStore((s) => s.filesBySession)
   const currentSessionId = useWorkspaceStore((s) => s.currentSessionId)
   const files = currentSessionId ? (filesBySession[currentSessionId] ?? EMPTY_FILES) : EMPTY_FILES
   const [manualKey, setManualKey] = useState(0)
-  const [view, setView] = useState<'preview' | 'code'>('preview')
+  const [view, setView] = useState<PreviewView>('preview')
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const srcdoc = useMemo(() => buildSrcdoc(files), [files])
   const paths = useMemo(() => Object.keys(files).sort(), [files])
@@ -51,31 +59,16 @@ export function PreviewArea() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid #eee' }}>
       <div className="preview-header">
-        <div className="preview-tabs">
-          <button
-            type="button"
-            className={`preview-tab ${view === 'preview' ? 'active' : ''}`}
-            onClick={() => setView('preview')}
-          >
-            预览
-          </button>
-          <button
-            type="button"
-            className={`preview-tab ${view === 'code' ? 'active' : ''}`}
-            onClick={() => setView('code')}
-          >
-            代码
-          </button>
-        </div>
+        <Segmented options={VIEW_OPTIONS} value={view} onChange={(v) => setView(v as PreviewView)} />
         <div className="preview-actions">
           {view === 'preview' && (
-            <button type="button" onClick={() => setManualKey((k) => k + 1)} disabled={srcdoc === null}>
+            <Button size="small" onClick={() => setManualKey((k) => k + 1)} disabled={srcdoc === null}>
               刷新
-            </button>
+            </Button>
           )}
-          <button type="button" onClick={downloadIndex} disabled={srcdoc === null}>
+          <Button size="small" onClick={downloadIndex} disabled={srcdoc === null}>
             下载
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -100,7 +93,8 @@ export function PreviewArea() {
             <div className="code-empty">还没有生成文件</div>
           ) : (
             <>
-              {/* 单文件时列出来是噪音；多于一个文件才需要选择器 */}
+              {/* 只在 >1 文件时出现。对应 antd 组件是 Menu，但它自带缩进/内边距，
+                  且本机没有多文件会话数据可做视觉验证 —— 有意保留原生 button */}
               {paths.length > 1 && (
                 <div className="code-file-list">
                   {paths.map((p) => (

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Input, Button, message as antdMessage } from 'antd'
 import { PaperClipOutlined, SendOutlined } from '@ant-design/icons'
+import './ChatInterface.css'
 import { useChatStore } from '../store/chatStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -80,13 +81,9 @@ export function ChatInterface() {
               <img src={src} alt="" style={{
                 width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd',
               }} />
+              {/* 有意保留原生 button：18px 圆形浮标不是 antd Button 的形态，样式收在 ChatInterface.css */}
               {!isStreaming && (
-                <button type="button" onClick={() => removeImage(i)} style={{
-                  position: 'absolute', top: -6, right: -6, width: 18, height: 18,
-                  borderRadius: '50%', border: 'none', background: '#ef4444', color: '#fff',
-                  fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  lineHeight: 1,
-                }}>
+                <button type="button" className="image-remove" onClick={() => removeImage(i)}>
                   ✕
                 </button>
               )}

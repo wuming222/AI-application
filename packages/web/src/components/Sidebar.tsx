@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Input, Empty, Dropdown, message as antdMessage } from 'antd'
+import { Button, Input, Empty, Dropdown, Tooltip, message as antdMessage } from 'antd'
 import { 
   PlusOutlined, 
   MenuFoldOutlined, 
@@ -236,17 +236,21 @@ export function Sidebar() {
         paddingTop: 12,
         background: '#fafafa',
       }}>
-        <Button
-          type="text"
-          icon={<MenuUnfoldOutlined />}
-          onClick={() => setCollapsed(false)}
-          style={{ marginBottom: 8 }}
-        />
-        <Button
-          type="text"
-          icon={<PlusOutlined />}
-          onClick={() => createOrReuseSession()}
-        />
+        <Tooltip title="展开侧边栏">
+          <Button
+            type="text"
+            icon={<MenuUnfoldOutlined />}
+            onClick={() => setCollapsed(false)}
+            style={{ marginBottom: 8 }}
+          />
+        </Tooltip>
+        <Tooltip title="新建会话">
+          <Button
+            type="text"
+            icon={<PlusOutlined />}
+            onClick={() => createOrReuseSession()}
+          />
+        </Tooltip>
       </div>
     )
   }
@@ -271,20 +275,22 @@ export function Sidebar() {
         }}>
           <span style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>会话列表</span>
           <div style={{ display: 'flex', gap: 4 }}>
-            <Button
-              type="text"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => createOrReuseSession()}
-              title="新建会话"
-            />
-            <Button
-              type="text"
-              size="small"
-              icon={<MenuFoldOutlined />}
-              onClick={() => setCollapsed(true)}
-              title="收起侧边栏"
-            />
+            <Tooltip title="新建会话">
+              <Button
+                type="text"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => createOrReuseSession()}
+              />
+            </Tooltip>
+            <Tooltip title="收起侧边栏">
+              <Button
+                type="text"
+                size="small"
+                icon={<MenuFoldOutlined />}
+                onClick={() => setCollapsed(true)}
+              />
+            </Tooltip>
           </div>
         </div>
 

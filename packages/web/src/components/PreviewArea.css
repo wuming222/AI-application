@@ -1,4 +1,4 @@
-/* Preview panel: tabs, code view, download */
+/* Preview panel: header controls (antd Segmented / Button) and code view */
 
 .preview-header {
   display: flex;
@@ -9,39 +9,9 @@
   border-bottom: 1px solid #eee;
 }
 
-.preview-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.preview-tab {
-  padding: 4px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #999;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.preview-tab:hover {
-  color: #333;
-}
-
-.preview-tab.active {
-  color: #333;
-  background: #f0f0f0;
-}
-
 .preview-actions {
   display: flex;
   gap: 8px;
-}
-
-.preview-actions button {
-  padding: 4px 12px;
-  font-size: 13px;
 }
 
 .preview-body {
