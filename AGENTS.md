@@ -17,7 +17,7 @@
 | `pnpm install` | 安装依赖 |
 | `pnpm dev` | 前端 Vite dev server（默认 5173） |
 | `pnpm dev:server` | 后端 `uvicorn app.main:app --reload --port 8000` |
-| `pnpm --filter web test:run` | 前端单测（vitest，当前 12 用例） |
+| `pnpm --filter web test:run` | 前端单测（vitest，当前 25 用例） |
 | `pnpm --filter web lint` | oxlint |
 | `pnpm build` | `tsc -b && vite build` — **当前会失败**，见「已知坑」 |
 
@@ -35,6 +35,8 @@ packages/web/src/
   llm/providers/mock.ts    无 key / 断网可跑通全链路
   preview/buildSrcdoc.ts   iframe srcdoc 实时预览（注入 localStorage/sessionStorage 内存 shim）
   store/                   zustand：chatStore / sessionStore / workspaceStore
+  styles/tokens.css        静态设计令牌（space/radius/font/shadow/mono/motion）
+  App.tsx useThemeVars()   主题派生颜色桥成 --app-*，与 tokens.css 两层分开
   hooks/useVoiceInput.ts   麦克风采集 + PCM 编码，连后端 WS
 packages/server/app/
   main.py                  FastAPI 入口，import 时 init_db()，注册三个 router
@@ -83,8 +85,8 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 
 ## 已知坑
 
-1. **`pnpm build` 目前是红的**：`tsc -b` 有 5 个历史遗留类型错误（`agent/runAgentLoop.ts` 两处未使用类型导入、`agent/toolRegistry.ts:101`、`components/AgentProgress.tsx:86`、`store/workspaceStore.ts:51`），均非近期特性引入。**验证用 `pnpm --filter web test:run`，不要用 build 结果当绿灯。**
+1. **`pnpm build` 目前是红的**：`tsc -b` 有 4 个历史遗留类型错误（`agent/runAgentLoop.ts` 两处未使用类型导入、`agent/toolRegistry.ts:101`、`store/workspaceStore.ts:51`），均非近期特性引入。**验证用 `pnpm --filter web test:run`，不要用 build 结果当绿灯。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
-4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:30`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。
-5. 前端只做了单测覆盖 agent/llm 纯逻辑；UI 交互（拖动排序、拖宽侧边栏）没有自动化测试，改完要在浏览器实操验证。
+4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/preview-error-capture/SDD.md`）。
+5. 单测覆盖 agent / llm / store / preview 的纯逻辑（25 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。
