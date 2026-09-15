@@ -154,6 +154,7 @@ export function MessageList() {
         ) : (
           <div
             key={i}
+            className={`message-bubble message-bubble-${item.msg.role}`}
             style={{
               alignSelf: item.msg.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: 'min(75%, 800px)',
@@ -169,13 +170,9 @@ export function MessageList() {
               lineHeight: 1.5,
             }}
           >
-            {item.msg.role === 'user' ? (
-              item.msg.content
-            ) : (
-              <div className="message-markdown">
-                <ReactMarkdown>{item.msg.content}</ReactMarkdown>
-              </div>
-            )}
+            <div className="message-markdown">
+              <ReactMarkdown>{item.msg.content}</ReactMarkdown>
+            </div>
             {item.msg.images && item.msg.images.length > 0 && (
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {item.msg.images.map((src, j) => (

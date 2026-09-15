@@ -96,3 +96,47 @@
   border-top: 1px solid #dfe2e5;
   margin: 0.8em 0;
 }
+
+/* User message bubble (blue background) - override text colors for readability */
+.message-bubble-user .message-markdown {
+  color: #fff;
+}
+
+.message-bubble-user .message-markdown code {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.message-bubble-user .message-markdown pre {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.message-bubble-user .message-markdown pre code {
+  background-color: transparent;
+  color: #fff;
+}
+
+.message-bubble-user .message-markdown a {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.message-bubble-user .message-markdown blockquote {
+  border-left-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-bubble-user .message-markdown th,
+.message-bubble-user .message-markdown td {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.message-bubble-user .message-markdown th {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.message-bubble-user .message-markdown hr {
+  border-top-color: rgba(255, 255, 255, 0.3);
+}
