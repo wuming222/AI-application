@@ -1,5 +1,5 @@
-/* 预览面板：头部（antd Segmented + 原生文字按钮）、预览 iframe、代码视图
-   颜色取 App.tsx 桥出来的 --app-* 变量（源头是 antd token） */
+/* 预览面板：头部（antd Segmented + 图标按钮）与代码视图
+   尺度取 tokens.css，颜色取 --app-*。只保留固有尺寸：文件列表宽 180px、选中指示条 2px */
 
 .preview-area {
   display: flex;
@@ -12,14 +12,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--app-border-secondary);
 }
 
 .preview-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .preview-body {
@@ -47,7 +47,7 @@
   align-items: center;
   justify-content: center;
   color: var(--app-text-tertiary);
-  font-size: 14px;
+  font-size: var(--font-md);
 }
 
 /* Code view */
@@ -62,7 +62,7 @@
   flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--app-border-secondary);
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   background: var(--app-bg-layout);
 }
 
@@ -70,8 +70,8 @@
 .code-file {
   display: block;
   width: 100%;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-xs);
   text-align: left;
   background: none;
   border: none;
@@ -101,10 +101,10 @@
 }
 
 .code-viewer-path {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-xs);
   color: var(--app-text-secondary);
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   border-bottom: 1px solid var(--app-border-secondary);
   background: var(--app-bg-container);
 }
@@ -112,18 +112,18 @@
 .code-content {
   flex: 1;
   margin: 0;
-  padding: 12px;
+  padding: var(--space-3);
   overflow: auto;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
   line-height: 1.5;
   white-space: pre;
   background: var(--app-bg-container);
 }
 
 .code-note {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-xs);
   color: var(--app-warning);
   background: var(--app-fill-tertiary);
   border-top: 1px solid var(--app-border-secondary);
@@ -134,6 +134,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--font-md);
   color: var(--app-text-tertiary);
 }

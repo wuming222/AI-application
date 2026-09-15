@@ -9,8 +9,8 @@ import './App.css'
 
 /**
  * antd v6 在这里没有把 token 暴露成全局 --ant-* 变量（实测组件节点上取不到），
- * 所以把需要的 token 桥成自有 CSS 变量挂在根上，各组件的同名 .css 用 var() 取。
- * 目的：颜色/圆角跟着 ConfigProvider 的主题与系统深色模式走，不在 css 里写死。
+ * 所以把**主题派生的颜色**桥成 --app-* 挂在根上，各组件的同名 .css 用 var() 取。
+ * 静态尺度（间距/圆角/字号/阴影/动效）在 styles/tokens.css，别往这里搬，否则同一值两套来源。
  */
 function useThemeVars(): React.CSSProperties {
   const { token } = theme.useToken()
@@ -32,8 +32,6 @@ function useThemeVars(): React.CSSProperties {
     '--app-fill-secondary': token.colorFillSecondary,
     '--app-fill-tertiary': token.colorFillTertiary,
     '--app-fill-quaternary': token.colorFillQuaternary,
-    '--app-radius': `${token.borderRadius}px`,
-    '--app-radius-lg': `${token.borderRadiusLG}px`,
   } as React.CSSProperties
 }
 
