@@ -27,9 +27,9 @@ AI 消息渲染后空白行过多，长回答读起来很松散。
 - `<pre>` 代码块自带 `pre` 语义，不受容器 `normal` 影响
 
 ## 验收标准
-- [ ] `.message-markdown` 计算样式为 `white-space: normal`
-- [ ] 同一条 AI 消息渲染后，段落数与源码空行数一致，且段落内不再出现由裸 `\n` 造成的额外空行
-- [ ] 列表项、加粗、代码块、标题、表格渲染无回归
-- [ ] 工具执行气泡的换行与改前一致（`white-space` 仍为 `pre-wrap`）
-- [ ] `package.json` / `pnpm-lock.yaml` 无新增依赖
-- [ ] `pnpm --filter web test:run` 通过
+- [x] `.message-markdown` 计算样式为 `white-space: normal`
+- [x] 同一条 AI 消息渲染后，段落数与源码空行数一致，且段落内不再出现由裸 `\n` 造成的额外空行（实测 4 条气泡共 25 个裸 `\n` 节点，渲染高度全部为 0）
+- [ ] 列表项、加粗、代码块、标题、表格渲染无回归 —— 列表与加粗实测无回归；当前会话数据里没有代码块/表格样例，未实测
+- [x] 工具执行气泡的换行与改前一致（`white-space` 仍为 `pre-wrap`）—— 代码层确认，该气泡不带 `.message-markdown` 类；当前页面无工具气泡实例
+- [x] `package.json` / `pnpm-lock.yaml` 无新增依赖
+- [x] `pnpm --filter web test:run` 通过（12/12）
