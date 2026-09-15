@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import 'highlight.js/styles/github.css'
 import { highlightCode } from '../preview/highlight'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { buildSrcdoc } from '../preview/buildSrcdoc'
 import './PreviewArea.css'
 
-// 没有文件时保持同一个对象引用，避免下游 useMemo / effect 每轮渲染都重算
+// 没有文件时保持同一个对象引用，避免下游 useMemo 每轮渲染都重算
 const EMPTY_FILES: Record<string, string> = {}
 
 // 超大文件只渲染前这么多字符，避免整块 DOM 卡住
@@ -21,18 +21,20 @@ export function PreviewArea() {
   const srcdoc = useMemo(() => buildSrcdoc(files), [files])
   const paths = useMemo(() => Object.keys(files).sort(), [files])
 
-  // 切换会话或文件被删后，选中项可能已不存在：回落到 index.html，再没有就取第一个
-  useEffect(() => {
-    if (selectedPath && paths.includes(selectedPath)) return
-    setSelectedPath(paths.includes('index.html') ? 'index.html' : (paths[0] ?? null))
-  }, [paths, selectedPath])
+  // 切换会话或文件被删后选中项可能已不存在：直接推导回落，不用副作用同步 state
+  const activePath =
+    selectedPath && paths.includes(selectedPath)
+      ? selectedPath
+      : paths.includes('index.html')
+        ? 'index.html'
+        : (paths[0] ?? null)
 
-  const selectedContent = selectedPath ? (files[selectedPath] ?? '') : ''
+  const selectedContent = activePath ? (files[activePath] ?? '') : ''
   const isTruncated = selectedContent.length > MAX_VIEW_CHARS
   const viewContent = isTruncated ? selectedContent.slice(0, MAX_VIEW_CHARS) : selectedContent
   const highlighted = useMemo(
-    () => (selectedPath ? highlightCode(viewContent, selectedPath) : ''),
-    [selectedPath, viewContent],
+    () => (activePath ? highlightCode(viewContent, activePath) : ''),
+    [activePath, viewContent],
   )
 
   const downloadIndex = () => {
@@ -72,7 +74,7 @@ export function PreviewArea() {
             </button>
           )}
           <button type="button" onClick={downloadIndex} disabled={srcdoc === null}>
-            下载 index.html
+            下载
           </button>
         </div>
       </div>
@@ -94,23 +96,27 @@ export function PreviewArea() {
 
       {view === 'code' && (
         <div className="code-pane">
-          <div className="code-file-list">
-            {paths.length === 0 && <div className="code-empty">还没有生成文件</div>}
-            {paths.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={`code-file ${p === selectedPath ? 'selected' : ''}`}
-                onClick={() => setSelectedPath(p)}
-              >
-                <span className="code-file-path">{p}</span>
-              </button>
-            ))}
-          </div>
-          <div className="code-viewer">
-            {selectedPath ? (
-              <>
-                <div className="code-viewer-path">{selectedPath}</div>
+          {paths.length === 0 ? (
+            <div className="code-empty">还没有生成文件</div>
+          ) : (
+            <>
+              {/* 单文件时列出来是噪音；多于一个文件才需要选择器 */}
+              {paths.length > 1 && (
+                <div className="code-file-list">
+                  {paths.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`code-file ${p === activePath ? 'selected' : ''}`}
+                      onClick={() => setSelectedPath(p)}
+                    >
+                      <span className="code-file-path">{p}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="code-viewer">
+                <div className="code-viewer-path">{activePath}</div>
                 <pre className="code-content">
                   <code dangerouslySetInnerHTML={{ __html: highlighted }} />
                 </pre>
@@ -119,11 +125,9 @@ export function PreviewArea() {
                     文件较大，仅展示前 {MAX_VIEW_CHARS} 字符，下载可查看完整内容
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="code-empty">选择左侧文件查看内容</div>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
