@@ -5,6 +5,16 @@
   gap: 8px;
   flex: 1;
   overflow: hidden;
+  /* 默认态是只读展示：不禁用的话点击/双击标题会拖出选区和插入点，看着像输入框 */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 重命名编辑态例外，必须能选中、编辑、复制 */
+.session-item input,
+.session-item textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .session-item.dragging {
