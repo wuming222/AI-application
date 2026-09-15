@@ -1,0 +1,47 @@
+/*
+ * 设计令牌（静态尺度层）
+ *
+ * 分两层，不要混：
+ *   1. 本文件 —— 静态尺度：间距 / 圆角 / 字号 / 阴影 / 动效 / 字体族。与主题无关，构建期就定死。
+ *   2. App.tsx 的 useThemeVars() —— 主题派生颜色（--app-*），必须运行时从 theme.useToken() 取，
+ *      否则深色模式会退回写死值。颜色的令牌不要往这里搬。
+ *
+ * 组件 .css 一律 var() 取值，不再写字面 px。例外只有一类：元素自身的固有尺寸
+ * （图标 12px、角标 18px、分隔条 5px、缩略图 60px、滚动区限高 220px 等），
+ * 它们不是节奏尺度，留在组件里并就地注明。
+ */
+
+:root {
+  /* 间距：4px 基准，档位对齐 antd 的 sizeStep */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 32px;
+
+  /* 圆角：4 档 + 全圆。6px 并入 8px，16/20px 并入 18px */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 18px;
+  --radius-full: 999px;
+
+  /* 字号：5 档。13.5px 并入 13px，15px 并入 16px */
+  --font-xs: 12px;
+  --font-sm: 13px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 18px;
+
+  /* 阴影：3 档。叠在主题色上的着色阴影留在组件里，不在这套尺度内 */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* 动效 */
+  --motion-fast: 0.15s;
+  --motion-base: 0.2s;
+
+  /* 字体族 */
+  --font-mono: 'Consolas', 'Monaco', monospace;
+}

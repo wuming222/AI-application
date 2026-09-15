@@ -1,5 +1,5 @@
-/* 对话流内的实时进度块。颜色取 App.tsx 桥出来的 --app-* 变量（源头是 antd token），
-   渐变用两个主题化的 fill 叠出来，深色模式下不会留下浅灰底 */
+/* 对话流内的实时进度块。尺度取 tokens.css，颜色取 --app-*（运行时由 antd token 桥接）。
+   只保留固有尺寸：spinner 12px 与 2px 描边、reasoning 的 4px 左条 */
 
 @keyframes spin {
   from {
@@ -35,17 +35,17 @@
 .agent-progress-container {
   align-self: flex-start;
   max-width: 75%;
-  padding: 12px 16px;
-  border-radius: 16px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-pill);
   background: linear-gradient(135deg, var(--app-fill-quaternary) 0%, var(--app-bg-layout) 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-sm);
   color: var(--app-text-secondary);
 }
 
 /* 原先按 index 判断是否最后一条来给 marginBottom，这里用相邻选择器 */
 .agent-step + .agent-step {
-  margin-top: 10px;
+  margin-top: var(--space-3);
 }
 
 .agent-step {
@@ -55,7 +55,7 @@
 .agent-thinking {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .agent-spinner {
@@ -64,26 +64,26 @@
   height: 12px;
   border: 2px solid var(--app-primary);
   border-top-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
 }
 
 /* 仅第一轮展示 reasoning */
 .agent-reasoning {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   background: var(--app-info-bg);
   border-left: 4px solid var(--app-info);
-  border-radius: var(--app-radius);
+  border-radius: var(--radius-sm);
   white-space: pre-wrap;
   line-height: 1.7;
-  font-size: 13.5px;
+  font-size: var(--font-sm);
   animation: fadeIn 0.2s ease-in;
-  transition: all 0.2s ease;
+  transition: all var(--motion-base);
 }
 
 .tool-run {
-  margin-left: 16px;
+  margin-left: var(--space-4);
   font-weight: 500;
 }
 
@@ -96,8 +96,8 @@
 }
 
 .tool-run-icon {
-  font-size: 14px;
-  margin-right: 4px;
+  font-size: var(--font-md);
+  margin-right: var(--space-1);
 }
 
 .agent-done {
@@ -108,6 +108,6 @@
 @media (max-width: 768px) {
   .agent-progress-container {
     max-width: 85%;
-    padding: 10px 12px;
+    padding: var(--space-2) var(--space-3);
   }
 }

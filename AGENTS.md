@@ -63,9 +63,11 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - 开了 `noUnusedLocals` / `noUnusedParameters`：残留的未使用导入直接让构建失败。
 - 技术栈固定：React 19 + Ant Design 6 + Zustand 5 + Vite。
 - **样式归属**：状态样式与布局样式写在同名 `.css` 的 class 里（如 `Sidebar.css`、`PreviewArea.css`），JSX 的 `style` 只放运行时才知道值的动态量（transform、用户决定的宽度）。同节点上的 inline style 会覆盖 `.css` 里的状态规则，已踩过：`.session-item.dragging` 的高亮被 inline `background` 盖掉。
-- **取值**：色值、圆角、间距取 antd token（`theme.useToken()`），别写死十六进制。`main.tsx` 已配 `colorPrimary` 与跟随系统的 `darkAlgorithm`，写死的颜色在深色模式下会和 antd 表面打架。
-  - 机制：antd v6 在这里**没有**把 token 暴露成全局 `--ant-*` 变量（实测组件节点上 `getPropertyValue('--ant-color-text')` 取不到），因此 `App.tsx` 用 `theme.useToken()` 把需要的 token 桥成 `--app-*` CSS 变量挂在根节点，各组件的同名 `.css` 通过 `var(--app-*)` 取。新增需要的值就在 `useThemeVars()` 里加一项，不要在 css 里恢复写死值。
-  - 例外：阴影与"叠在特定底色上"的半透明白/黑（如用户气泡内的 `rgba(255,255,255,.x)`）保留字面值 —— antd 的 `boxShadow*` 明显更弱，换上去是可见的视觉回归。
+- **取值（两层，别混）**：
+  - 静态尺度 → `src/styles/tokens.css`：`--space-1..5`(4/8/12/16/32)、`--radius-xs|sm|lg|pill|full`(4/8/12/18/999)、`--font-xs..xl`(12/13/14/16/18)、`--shadow-sm|md|lg`、`--motion-fast|base`、`--font-mono`。组件 `.css` 里不要再写字面 px。
+  - 主题派生颜色 → `App.tsx` 的 `useThemeVars()` 桥成 `--app-*`。antd v6 在这里**没有**把 token 暴露成全局 `--ant-*` 变量（实测组件节点上 `getPropertyValue('--ant-color-text')` 取不到），所以必须运行时从 `theme.useToken()` 取；`main.tsx` 已配 `colorPrimary` 与跟随系统的 `darkAlgorithm`，写死的颜色在深色模式下会和 antd 表面打架。圆角/间距/字号不要搬回这个桥，否则同一值两套来源。
+  - **例外（允许字面 px）**：元素自身的固有尺寸 —— 折叠宽 48px、分隔条 5px、调宽把手 6px、指示条 2×40px、spinner 12px、角标 18px、缩略图 60px、图片上限 120px、滚动限高 220px、列表宽 180px、`min-width: 280px`、1px 描边。这类值不是节奏尺度，留在组件里即可，但要在文件头或该行注明原因。
+  - 阴影与"叠在特定底色上"的半透明白/黑（如用户气泡内的 `rgba(255,255,255,.x)` 与它的着色阴影）保留字面值 —— antd 的 `boxShadow*` 明显更弱，替换会造成可见回归。
   - antd 组件自身的 `disabled` / 选中态视觉由组件管理，不要再为这类状态写 inline style。
 - **优先用组件库**：能用 antd 组件表达的交互不要手写裸标签 —— 分段切换用 `Segmented`（不要裸 `<button>` + 自制 active 样式），悬停提示用 `Tooltip`（不要用 `title` 属性），按钮优先 `Button`。但**视觉取舍以实际效果为准**：antd 形态若确实不如原有写法，允许保留原生元素，前提是就地注明理由并把样式收进 class（已生效的例外：`ChatInterface` 的 18px 图片移除角标、`PreviewArea` 的多文件列表行）。不要不设前提地把所有裸标签换掉。
 - 浏览器侧偏好统一存 localStorage（现有 key：`session-order`、`sidebar-width`），必须包 try/catch —— 隐私模式/配额满会抛异常。
