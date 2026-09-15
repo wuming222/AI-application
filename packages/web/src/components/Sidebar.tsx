@@ -17,6 +17,20 @@ import { CSS } from '@dnd-kit/utilities'
 import './Sidebar.css'
 import { useSessionStore } from '../store/sessionStore'
 import { useChatStore } from '../store/chatStore'
+import type { Session } from '../api/sessions'
+
+interface SortableSessionItemProps {
+  session: Session
+  isActive: boolean
+  isEditing: boolean
+  editTitle: string
+  setEditTitle: (title: string) => void
+  submitRename: () => void
+  setEditingId: (id: string | null) => void
+  handleRename: (id: string, title: string) => void
+  handleDelete: (id: string) => void
+  switchSession: (id: string) => void
+}
 
 // Sortable session item component
 function SortableSessionItem({ 
@@ -30,7 +44,7 @@ function SortableSessionItem({
   handleRename, 
   handleDelete,
   switchSession,
-}: any) {
+}: SortableSessionItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: session.id,
   })
@@ -46,19 +60,13 @@ function SortableSessionItem({
       ref={setNodeRef}
       style={style}
       onClick={() => switchSession(session.id)}
-      className="session-item"
+      className={`session-item ${isDragging ? 'dragging' : ''}`}
     >
       {/* Drag handle */}
       <div
         {...attributes}
         {...listeners}
-        style={{
-          cursor: 'grab',
-          padding: '0 4px',
-          display: 'flex',
-          alignItems: 'center',
-          color: '#999',
-        }}
+        className="drag-handle"
       >
         <DragOutlined />
       </div>
@@ -177,6 +185,9 @@ export function Sidebar() {
 
     const oldIndex = sessions.findIndex((s) => s.id === active.id)
     const newIndex = sessions.findIndex((s) => s.id === over.id)
+
+    // Defensive check: ensure both indices are valid
+    if (oldIndex === -1 || newIndex === -1) return
 
     reorderSessions(oldIndex, newIndex)
   }

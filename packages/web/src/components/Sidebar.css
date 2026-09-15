@@ -7,10 +7,12 @@
   overflow: hidden;
 }
 
-.session-item:hover .drag-handle {
-  opacity: 1;
+.session-item.dragging {
+  opacity: 0.5;
+  background-color: rgba(107, 159, 212, 0.1);
 }
 
+/* Drag handle - visible on hover */
 .drag-handle {
   cursor: grab;
   padding: 0 4px;
@@ -21,18 +23,10 @@
   transition: opacity 0.2s ease;
 }
 
+.session-item:hover .drag-handle {
+  opacity: 1;
+}
+
 .drag-handle:active {
   cursor: grabbing;
-}
-
-/* Dragging state */
-.session-dragging {
-  opacity: 0.5 !important;
-  background-color: rgba(107, 159, 212, 0.1) !important;
-}
-
-/* Drop indicator */
-.session-drop-indicator {
-  border-top: 2px solid #6b9fd4;
-  margin-top: -2px;
 }

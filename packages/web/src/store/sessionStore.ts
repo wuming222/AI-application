@@ -32,21 +32,25 @@ export const useSessionStore = create<SessionState>((set) => ({
       const sessions = await fetchSessions()
       
       // Load saved order from localStorage
-      const savedOrder = localStorage.getItem('session-order')
-      if (savedOrder) {
-        const orderIds: string[] = JSON.parse(savedOrder)
-        // Sort sessions according to saved order
-        sessions.sort((a, b) => {
-          const indexA = orderIds.indexOf(a.id)
-          const indexB = orderIds.indexOf(b.id)
-          // If both are in saved order, use that order
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB
-          // If only one is in saved order, prioritize it
-          if (indexA !== -1) return -1
-          if (indexB !== -1) return 1
-          // Otherwise keep original order
-          return 0
-        })
+      try {
+        const savedOrder = localStorage.getItem('session-order')
+        if (savedOrder) {
+          const orderIds: string[] = JSON.parse(savedOrder)
+          // Sort sessions according to saved order
+          sessions.sort((a, b) => {
+            const indexA = orderIds.indexOf(a.id)
+            const indexB = orderIds.indexOf(b.id)
+            // If both are in saved order, use that order
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB
+            // If only one is in saved order, prioritize it
+            if (indexA !== -1) return -1
+            if (indexB !== -1) return 1
+            // Otherwise keep original order
+            return 0
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to read session order from localStorage:', e)
       }
       
       set({ sessions, isLoading: false })
@@ -80,10 +84,14 @@ export const useSessionStore = create<SessionState>((set) => ({
         s.currentSessionId === id ? (sessions[0]?.id ?? null) : s.currentSessionId
       
       // Update saved order after deletion
-      const savedOrder = localStorage.getItem('session-order')
-      if (savedOrder) {
-        const orderIds: string[] = JSON.parse(savedOrder).filter((sid: string) => sid !== id)
-        localStorage.setItem('session-order', JSON.stringify(orderIds))
+      try {
+        const savedOrder = localStorage.getItem('session-order')
+        if (savedOrder) {
+          const orderIds: string[] = JSON.parse(savedOrder).filter((sid: string) => sid !== id)
+          localStorage.setItem('session-order', JSON.stringify(orderIds))
+        }
+      } catch (e) {
+        console.warn('Failed to update session order in localStorage:', e)
       }
       
       return { sessions, currentSessionId }
@@ -113,8 +121,12 @@ export const useSessionStore = create<SessionState>((set) => ({
       sessions.splice(toIndex, 0, removed)
       
       // Save new order to localStorage
-      const orderIds = sessions.map((sess) => sess.id)
-      localStorage.setItem('session-order', JSON.stringify(orderIds))
+      try {
+        const orderIds = sessions.map((sess) => sess.id)
+        localStorage.setItem('session-order', JSON.stringify(orderIds))
+      } catch (e) {
+        console.warn('Failed to save session order to localStorage:', e)
+      }
       
       return { sessions }
     })
