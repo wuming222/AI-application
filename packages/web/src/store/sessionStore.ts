@@ -75,13 +75,15 @@ export const useSessionStore = create<SessionState>((set) => ({
   // 停在一条没有任何内容的会话上再点新建，重复建只会堆出空会话
   createOrReuseSession: async (): Promise<string> => {
     const { currentSessionId, createSession } = useSessionStore.getState()
-    if (currentSessionId) {
-      const messageCount = useChatStore.getState().messages.length
-      const fileCount = Object.keys(useWorkspaceStore.getState().getCurrentFiles()).length
-      if (messageCount === 0 && fileCount === 0) {
-        useChatStore.getState().requestComposerFocus()
-        return currentSessionId
-      }
+    const chat = useChatStore.getState()
+    const workspace = useWorkspaceStore.getState()
+    const loadedForCurrent =
+      !!currentSessionId &&
+      chat.messagesSessionId === currentSessionId &&
+      workspace.currentSessionId === currentSessionId
+    if (loadedForCurrent && chat.messages.length === 0 && Object.keys(workspace.getCurrentFiles()).length === 0) {
+      chat.requestComposerFocus()
+      return currentSessionId
     }
     return createSession()
   },
@@ -115,7 +117,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     if (newCurrent) {
       useChatStore.getState().loadSession(newCurrent)
     } else {
-      useChatStore.setState({ messages: [] })
+      useChatStore.setState({ messages: [], messagesSessionId: null })
       useWorkspaceStore.getState().setCurrentSession('')
     }
   },

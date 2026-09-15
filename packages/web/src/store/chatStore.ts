@@ -9,6 +9,8 @@ import { fetchMessages, saveMessages, fetchWorkspace, saveWorkspace, generateTit
 
 interface ChatState {
   messages: Message[]
+  // messages 属于哪条会话；loadSession 是异步的，切会话期间它可能仍是上一条会话的消息
+  messagesSessionId: string | null
   isStreaming: boolean
   progress: AgentProgress | null
   composerFocusTick: number
@@ -23,6 +25,7 @@ let abortController: AbortController | null = null
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  messagesSessionId: null,
   isStreaming: false,
   progress: null,
   composerFocusTick: 0,
@@ -35,7 +38,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         fetchMessages(sessionId),
         fetchWorkspace(sessionId),
       ])
-      set({ messages, progress: null })
+      set({ messages, messagesSessionId: sessionId, progress: null })
       useWorkspaceStore.getState().setCurrentSession(sessionId)
       useWorkspaceStore.getState().loadWorkspace(sessionId, files)
     } catch (err) {
