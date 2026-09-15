@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Segmented } from 'antd'
+import { Button, Segmented, Tooltip } from 'antd'
+import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import 'highlight.js/styles/github.css'
 import { highlightCode } from '../preview/highlight'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -61,17 +62,22 @@ export function PreviewArea() {
       <div className="preview-header">
         <Segmented options={VIEW_OPTIONS} value={view} onChange={(v) => setView(v as PreviewView)} />
         <div className="preview-actions">
-          {/* 有意保留原生 button：这两个按钮试过 antd Button（带边框文字 / 图标 text /
-              图标带边框三种形态）都不满意，最终回退到原有的原生文字按钮样式。
-              见 AGENTS.md「优先用组件库」里的有意例外条款 */}
           {view === 'preview' && (
-            <button type="button" onClick={() => setManualKey((k) => k + 1)} disabled={srcdoc === null}>
-              刷新
-            </button>
+            <Tooltip title="重新加载预览">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => setManualKey((k) => k + 1)}
+                disabled={srcdoc === null}
+              />
+            </Tooltip>
           )}
-          <button type="button" onClick={downloadIndex} disabled={srcdoc === null}>
-            下载
-          </button>
+          <Tooltip title="下载 index.html（资源已内联）">
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={downloadIndex}
+              disabled={srcdoc === null}
+            />
+          </Tooltip>
         </div>
       </div>
 

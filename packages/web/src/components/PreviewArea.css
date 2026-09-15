@@ -14,11 +14,6 @@
   gap: 8px;
 }
 
-.preview-actions button {
-  padding: 4px 12px;
-  font-size: 13px;
-}
-
 .preview-body {
   flex: 1;
   min-height: 0;

@@ -247,7 +247,7 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 ### 待办
 - [x] P0：规范写进 `AGENTS.md` 的编码约束（样式归属 / token 取值 / 优先用组件库三条）
 - [x] 预览/代码两个裸 tab → antd `Segmented`，手写的 `.preview-tab` 四段样式已删
-- [x] 刷新 / 下载：试过三种 antd 形态（带边框文字、图标 text、图标带边框）都不满意，按用户要求**回退为原生文字按钮**，只保留「下载」这个短文案；样式仍由 `.preview-actions button` 提供，就地注明为有意例外
+- [x] 刷新 / 下载 → antd `Button` 图标化（默认带边框、32×32 与 Segmented 同高），说明文字进 `Tooltip`；中间一度回退成原生文字按钮，又按要求撤回图标化版本。踩点记录在 SDD：`Button` 会给两字中文标签插字距、`type="text"` 没有轮廓所以显淡
 - [x] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`（折叠态原本没提示，一并补上）；实测 `.ant-tooltip` 渲染、原生 `title` 已移除
 - [x] 剩余裸按钮逐个判定并就地注明理由：文件列表行、图片移除角标、刷新、下载；角标的 inline style 收进新建的 `ChatInterface.css`
 - [x] `AGENTS.md` 的组件优先条款据本轮结果校准：antd 不是无条件更优，视觉取舍以实际效果为准，保留原生需注明理由
