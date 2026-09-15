@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import 'highlight.js/styles/github.css'
+import { highlightCode } from '../preview/highlight'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { buildSrcdoc } from '../preview/buildSrcdoc'
 import './PreviewArea.css'
@@ -27,6 +29,11 @@ export function PreviewArea() {
 
   const selectedContent = selectedPath ? (files[selectedPath] ?? '') : ''
   const isTruncated = selectedContent.length > MAX_VIEW_CHARS
+  const viewContent = isTruncated ? selectedContent.slice(0, MAX_VIEW_CHARS) : selectedContent
+  const highlighted = useMemo(
+    () => (selectedPath ? highlightCode(viewContent, selectedPath) : ''),
+    [selectedPath, viewContent],
+  )
 
   const downloadIndex = () => {
     if (srcdoc === null) return
@@ -97,7 +104,6 @@ export function PreviewArea() {
                 onClick={() => setSelectedPath(p)}
               >
                 <span className="code-file-path">{p}</span>
-                <span className="code-file-size">{files[p].length} 字符</span>
               </button>
             ))}
           </div>
@@ -106,7 +112,7 @@ export function PreviewArea() {
               <>
                 <div className="code-viewer-path">{selectedPath}</div>
                 <pre className="code-content">
-                  {isTruncated ? selectedContent.slice(0, MAX_VIEW_CHARS) : selectedContent}
+                  <code dangerouslySetInnerHTML={{ __html: highlighted }} />
                 </pre>
                 {isTruncated && (
                   <div className="code-note">
