@@ -64,7 +64,7 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - 技术栈固定：React 19 + Ant Design 6 + Zustand 5 + Vite。
 - **样式归属**：状态样式与布局样式写在同名 `.css` 的 class 里（如 `Sidebar.css`、`PreviewArea.css`），JSX 的 `style` 只放运行时才知道值的动态量（transform、用户决定的宽度）。同节点上的 inline style 会覆盖 `.css` 里的状态规则，已踩过：`.session-item.dragging` 的高亮被 inline `background` 盖掉。
 - **取值**：色值、圆角、间距取 antd token（`theme.useToken()`），别写死十六进制。`main.tsx` 已配 `colorPrimary` 与跟随系统的 `darkAlgorithm`，写死的颜色在深色模式下会和 antd 表面打架。
-- **优先用组件库**：能用 antd 组件表达的交互不要手写裸标签 —— 分段切换用 `Segmented`（不要裸 `<button>` + 自制 active 样式），悬停提示用 `Tooltip`（不要用 `title` 属性），按钮统一 `Button`。确实不适合用组件的（如 18px 圆形角标），保留原生元素但就地注明理由，并把样式收进 class。
+- **优先用组件库**：能用 antd 组件表达的交互不要手写裸标签 —— 分段切换用 `Segmented`（不要裸 `<button>` + 自制 active 样式），悬停提示用 `Tooltip`（不要用 `title` 属性），按钮优先 `Button`。但**视觉取舍以实际效果为准**：antd 的几种形态（带边框文字 / 图标 text / 图标带边框）若都不如原有写法，允许保留原生元素，前提是就地注明理由并把样式收进 class（已生效的例外：`PreviewArea` 头部的刷新/下载、`ChatInterface` 的 18px 图片移除角标）。不要不设前提地把所有裸标签换掉。
 - 浏览器侧偏好统一存 localStorage（现有 key：`session-order`、`sidebar-width`），必须包 try/catch —— 隐私模式/配额满会抛异常。
 - `toolRegistry` 工具的 `args` 类型是 `Record<string, unknown>`，取值要显式收窄后再用，别直接当 ReactNode / string 用。
 

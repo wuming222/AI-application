@@ -19,13 +19,19 @@
 - `VIEW_OPTIONS` 用 `{ label, value: PreviewView }[]` 定义，避免字符串比较与 `as` 散落
 - 删除 `PreviewArea.css` 里的 `.preview-tabs`、`.preview-tab`、`.preview-tab:hover`、`.preview-tab.active` 四段手写样式
 
-### 3. 刷新 / 下载 → 图标化 `Button`
-- 文件：`PreviewArea.tsx`（`:72`、`:76`）
-- 换成 antd `Button`（默认带边框）+ 图标（`ReloadOutlined` / `DownloadOutlined`），**默认尺寸**以与左侧 `Segmented` 的 32px 高度对齐；说明文字移到 `Tooltip`；保留 `disabled={srcdoc === null}`
-- 不用文字按钮的理由：antd 会给两字中文标签自动插一个字距，渲染成「刷 新」「下 载」
-- 不保留 `type="text"` 的理由：图标色本来就已经是最深的 `colorText`（`rgba(0,0,0,0.88)`），显淡不是颜色浅，而是**完全没有边框与底色**、控件轮廓不存在，加上 24px 在 32px 的 Segmented 旁边显小
-- 刷新仍只在预览视图显示；`downloadIndex` 逻辑不动
-- 删掉 `.preview-actions button` 这条为裸按钮写的补丁样式
+### 3. 刷新 / 下载 → 回退为原生按钮（结论：不用 antd）
+这一项试了三种 antd 形态都不满意，最终按用户要求恢复 antd 化之前的原生文字按钮：
+
+| 尝试 | 形态 | 反馈 |
+|---|---|---|
+| ① | `Button size="small"` + 文字 | 「最丑就是这两」—— 两字中文被 antd 自动插字距，渲染成「刷 新」「下 载」 |
+| ② | `Button type="text"` + 图标 + Tooltip | 「颜色太淡」—— 但实测图标色已是最深的 `colorText(rgba(0,0,0,0.88))`，淡的原因是 `type="text"` 无边框无底色、控件没有轮廓 |
+| ③ | `Button` 默认带边框 + 图标，尺寸对齐 Segmented 的 32px | 仍不满意，要求恢复原样 |
+| ④ | **原生 `<button>` + `.preview-actions button` 样式**（当前状态） | 采纳 |
+
+保留的改动只有一处：文案沿用已确认的「下载」，不再回到「下载 index.html」。
+
+教训写进 `AGENTS.md`：antd 组件不是无条件更优，视觉取舍以实际效果为准；`Button` 对两字中文标签的字距、以及 `type="text"` 缺少轮廓这两点尤其容易踩。这两个按钮作为**有意例外**就地注明了理由。
 
 ### 4. `title` → `Tooltip`
 - 文件：`packages/web/src/components/Sidebar.tsx`
@@ -38,12 +44,12 @@
 - 需要新建 `packages/web/src/components/ChatInterface.css`（该组件目前同名样式文件都没有）
 
 ## 验收标准
-- [x] `grep -rn "<button" packages/web/src` 只剩 2 处（`ChatInterface.tsx:86`、`PreviewArea.tsx:101`），两处都有就近注释说明保留理由
+- [x] `grep -rn "<button" packages/web/src` 剩 4 处，全部有就近注释说明理由：`ChatInterface.tsx:86`（角标）、`PreviewArea.tsx` 的刷新 / 下载（回退原生）与文件列表行（无多文件数据可验证）
 - [x] 预览/代码切换由 `Segmented` 承担，切换行为与之前一致（实测来回切 iframe 仍是同一 DOM 节点，代码视图 534 个高亮 span 正常）
-- [x] 刷新、下载是 antd 默认带边框的图标按钮，实测 32×32 与左侧 `Segmented` 同高；Tooltip 给出说明；点击下载仍产出 8944 字节的 Blob；无产物时为禁用态；代码视图下只剩下载、刷新按预期隐藏
+- [x] 刷新、下载回退为原生文字按钮：实测 `padding 4px 12px`、`font-size 13px`、53×30、无 `ant-btn` 类，文案「刷新」「下载」；有产物时点击下载产出 8944 字节 Blob，无产物时为禁用态；代码视图下刷新按预期隐藏
 - [x] Sidebar 新建/收起按钮出现 antd Tooltip（实测 `.ant-tooltip` 渲染出；原生 `title` 属性已不存在）
 - [ ] 图片移除角标外观与改前一致，点击仍能移除 —— 需要真实上传文件才会渲染出角标，未实测（仅确认样式值逐条搬进 `.image-remove`，未改动数值）
-- [x] 手写 `.preview-tab*` 与 `.preview-actions button` 样式已删，无死规则
+- [x] 手写的 `.preview-tabs` / `.preview-tab*` 四段样式已删；`.preview-actions button` 因按钮回退而保留
 - [x] 浏览器实测无明显尺寸回归：header 高 45px、Segmented 32×104px，在 280px 宽面板内不溢出
 - [x] `pnpm --filter web test:run` 25/25 通过；`npx tsc -b` 不新增错误
 

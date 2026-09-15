@@ -247,8 +247,9 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 ### 待办
 - [x] P0：规范写进 `AGENTS.md` 的编码约束（样式归属 / token 取值 / 优先用组件库三条）
 - [x] 预览/代码两个裸 tab → antd `Segmented`，手写的 `.preview-tab` 四段样式已删
-- [x] 刷新 / 下载 → antd `Button`（禁用态与下载产出 Blob 均实测正常）
+- [x] 刷新 / 下载：试过三种 antd 形态（带边框文字、图标 text、图标带边框）都不满意，按用户要求**回退为原生文字按钮**，只保留「下载」这个短文案；样式仍由 `.preview-actions button` 提供，就地注明为有意例外
 - [x] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`（折叠态原本没提示，一并补上）；实测 `.ant-tooltip` 渲染、原生 `title` 已移除
-- [x] 剩余 2 个裸按钮逐个判定：文件列表行与图片移除角标有意保留原生，都已就地注明理由；角标的 inline style 收进新建的 `ChatInterface.css`
+- [x] 剩余裸按钮逐个判定并就地注明理由：文件列表行、图片移除角标、刷新、下载；角标的 inline style 收进新建的 `ChatInterface.css`
+- [x] `AGENTS.md` 的组件优先条款据本轮结果校准：antd 不是无条件更优，视觉取舍以实际效果为准，保留原生需注明理由
 - [x] 浏览器实测无明显尺寸回归（header 45px、Segmented 32×104px 在 280px 面板内不溢出），切视图 iframe 仍不重载
 - [ ] 图片移除角标的视觉一致性未实测 —— 要真实上传文件才会渲染出角标
