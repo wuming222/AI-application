@@ -220,3 +220,43 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 - [ ] 错误条 UI 与「填入输入框」动作
 - [ ] 自动修复开关（默认关）与轮次上限
 - [ ] 去重 / 上限逻辑补单测
+
+## 统一到 Ant Design 组件
+
+### 问题描述
+项目已经引了 antd，但不少界面仍是裸标签 + inline style 手写的，没有吃到组件库的能力。盘点结果（实测计数）：
+
+| 项 | 现状 |
+|---|---|
+| 裸 `<button>` | 6 处：`PreviewArea.tsx` 5（预览/代码 tab、刷新、下载、文件列表行）、`ChatInterface.tsx:84` 1（图片移除角标） |
+| inline style | ChatInterface 14、Sidebar 13、MessageList 12、AgentProgress 8、App 6、PreviewArea 3 |
+| 已在用 | Button、Input、Empty、Dropdown、message、ConfigProvider + theme |
+| 缺席 | Segmented/Tabs、Tooltip（现在用 `title` 属性）、Space/Flex、Layout、Typography |
+
+`main.tsx` 已经配了 `colorPrimary: '#6b9fd4'` 与跟随系统的 `darkAlgorithm`，但组件里散落硬编码色值 —— 一旦切到深色模式，这些写死的颜色会和 antd 的暗色表面打架。
+
+### 本轮范围（已确认：只做 P0 + P1）
+- **P0 定规范**：写进 `AGENTS.md` —— 状态/布局样式归 `.css` class，JSX 只留真正动态的值；色值、圆角、间距取 antd token，不写死。理由是先后顺序很关键：antd 组件自带 CSS-in-JS 样式，留着 inline style 去套组件会踩优先级覆盖（`.dragging` 被 inline `background` 盖掉就是这么踩的）
+- **P1 换控件**：6 个裸按钮逐个判定该换成什么；`title` 属性 → `Tooltip`；预览/代码切换 → `Segmented`
+
+### 后续追加：P2 与 P3 也做了
+原计划推迟，随后按要求一并完成，细节见 `docs/antd-consistency/SDD.md` 的「P2 + P3 追加执行」。
+
+- **P2 色值换 token**：机制不是 `var(--ant-*)`（实测这套 antd v6 在组件节点上取不到 `--ant-*` 变量），而是 `App.tsx` 用 `theme.useToken()` 桥出 `--app-*` 挂根节点，各组件 `.css` 用 `var(--app-*)`。阴影与叠在特定底色上的半透明白/黑保留字面值
+- **P3 布局收敛**：没有换成 `Flex`/`Space`/`Layout`（那只是把 inline style 挪进 props，不解决状态写不进 class 的问题），而是把布局与状态样式全部收进同名 `.css`。inline style 从 56 处降到 3 处动态值
+- **验证方式**：因没有视觉回归测试且 in-app 浏览器截不了图，改为改动前用 `getComputedStyle`/`getBoundingClientRect` 打基线、改完跑同一段探针比对 —— 结论是几何零变化，颜色仅按映射表位移
+- **残留风险**：深色模式的实际观感没逐屏确认过（需要把系统切到 dark 再看）
+
+### 待办
+- [x] P0：规范写进 `AGENTS.md` 的编码约束（样式归属 / token 取值 / 优先用组件库三条）
+- [x] 预览/代码两个裸 tab → antd `Segmented`，手写的 `.preview-tab` 四段样式已删
+- [x] 刷新 / 下载 → antd `Button` 图标化（默认带边框、32×32 与 Segmented 同高），说明文字进 `Tooltip`；中间一度回退成原生文字按钮，又按要求撤回图标化版本。踩点记录在 SDD：`Button` 会给两字中文标签插字距、`type="text"` 没有轮廓所以显淡
+- [x] Sidebar 的 `title="新建会话"` / `title="收起侧边栏"` → `Tooltip`（折叠态原本没提示，一并补上）；实测 `.ant-tooltip` 渲染、原生 `title` 已移除
+- [x] 剩余裸按钮逐个判定并就地注明理由：文件列表行、图片移除角标、刷新、下载；角标的 inline style 收进新建的 `ChatInterface.css`
+- [x] `AGENTS.md` 的组件优先条款据本轮结果校准：antd 不是无条件更优，视觉取舍以实际效果为准，保留原生需注明理由
+- [x] 浏览器实测无明显尺寸回归（header 45px、Segmented 32×104px 在 280px 面板内不溢出），切视图 iframe 仍不重载
+- [ ] 图片移除角标的视觉一致性未实测 —— 要真实上传文件才会渲染出角标
+- [x] P2：组件 TSX 内无写死色值，面/边框/文字/圆角全部经 `--app-*` 桥接取 antd token
+- [x] P3：布局与状态样式收进同名 `.css`，inline style 56 → 3 处；顺带清掉媒体查询里的 `!important` 与 JSX 内的 `@keyframes`
+- [x] 改前/改后计算样式比对：几何零变化，颜色只按映射表位移；聊天列拖宽与预览保活均正常
+- [ ] 深色模式观感未逐屏确认 —— 需要把系统切到 dark 再看一轮

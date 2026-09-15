@@ -1,7 +1,113 @@
+/* 消息列表：布局、气泡、工具执行块；Markdown 内容样式在下方 */
+/* 颜色一律取 App.tsx 桥出来的 --app-* 变量（源头是 antd token）。
+   阴影与半透明白/黑叠层保留字面值：它们是叠在特定底色上的效果，没有对应 token */
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-list-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 200px;
+}
+
+/* 气泡：内容走 ReactMarkdown，所以不再需要 pre-wrap（它会与块级排版叠加出多余空行） */
+.message-bubble {
+  max-width: min(75%, 800px);
+  padding: 10px 14px;
+  border-radius: 18px;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.message-bubble-assistant {
+  align-self: flex-start;
+  background-color: var(--app-bg-container);
+  color: var(--app-text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.message-bubble-user {
+  align-self: flex-end;
+  background-color: var(--app-primary);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(107, 159, 212, 0.2);
+}
+
+.message-images {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.message-image {
+  max-width: 120px;
+  max-height: 120px;
+  border-radius: var(--app-radius);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* 工具执行气泡：渲染的是原始文本，pre-wrap 必须保留 */
+.tool-bubble {
+  align-self: flex-start;
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background-color: var(--app-bg-container);
+  color: var(--app-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.tool-bubble-summary {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tool-round-text {
+  margin-bottom: 4px;
+}
+
+.tool-item {
+  margin-bottom: 2px;
+}
+
+.tool-item-summary {
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+/* 展开内容限高内部滚动，避免在对话底部展开时大幅撑高列表、把点击行顶出视野 */
+.tool-item-detail {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  white-space: pre-wrap;
+  margin-top: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.tool-item-result {
+  margin-top: 4px;
+}
+
 /* Markdown content styles for assistant messages */
 
-/* 气泡上的 inline pre-wrap 会继承进来，把 react-markdown 输出的裸 \n 文本节点
-   逐条渲染成换行，与块级排版叠加出多余空行；这里断开继承 */
+/* 断掉气泡可能继承到的 pre-wrap，让换行完全交给 Markdown 的块级结构 */
 .message-markdown {
   white-space: normal;
 }
@@ -40,16 +146,16 @@
 
 .message-markdown code {
   font-family: 'Consolas', 'Monaco', monospace;
-  background-color: rgba(0, 0, 0, 0.06);
+  background-color: var(--app-fill-tertiary);
   padding: 0.15em 0.3em;
   border-radius: 3px;
   font-size: 0.9em;
 }
 
 .message-markdown pre {
-  background-color: #f6f8fa;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 6px;
+  background-color: var(--app-fill-quaternary);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
   padding: 12px;
   overflow-x: auto;
   margin: 0.5em 0;
@@ -65,13 +171,13 @@
 .message-markdown blockquote {
   margin: 0.5em 0;
   padding: 0.3em 0.8em;
-  border-left: 4px solid #dfe2e5;
-  color: #6a737d;
-  background-color: rgba(0, 0, 0, 0.02);
+  border-left: 4px solid var(--app-border);
+  color: var(--app-text-secondary);
+  background-color: var(--app-fill-quaternary);
 }
 
 .message-markdown a {
-  color: #0366d6;
+  color: var(--app-primary);
   text-decoration: none;
 }
 
@@ -87,23 +193,23 @@
 
 .message-markdown th,
 .message-markdown td {
-  border: 1px solid #dfe2e5;
+  border: 1px solid var(--app-border);
   padding: 6px 10px;
   text-align: left;
 }
 
 .message-markdown th {
-  background-color: #f6f8fa;
+  background-color: var(--app-fill-quaternary);
   font-weight: 600;
 }
 
 .message-markdown hr {
   border: none;
-  border-top: 1px solid #dfe2e5;
+  border-top: 1px solid var(--app-border);
   margin: 0.8em 0;
 }
 
-/* User message bubble (blue background) - override text colors for readability */
+/* 用户消息气泡（主题色底）- 前景色改成白色系保证可读 */
 .message-bubble-user .message-markdown {
   color: #fff;
 }

@@ -1,4 +1,73 @@
-/* Session item styles */
+/* 侧边栏：容器、头部、会话列表项、拖拽与调宽手柄
+   颜色与圆角一律取 App.tsx 桥出来的 --app-* 变量（源头是 antd token），不写死。
+   阴影保留字面值：antd 的 boxShadow* 比现有观感弱很多，换上去是明显的视觉回归 */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--app-border-secondary);
+  background: var(--app-bg-layout);
+  position: relative;
+}
+
+/* 折叠态 */
+.sidebar-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  padding-top: 12px;
+  border-right: 1px solid var(--app-border-secondary);
+  background: var(--app-bg-layout);
+}
+
+.sidebar-expand {
+  margin-bottom: 8px;
+}
+
+/* 头部 */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--app-border-secondary);
+}
+
+.sidebar-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--app-text);
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 列表 */
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.session-list-inner {
+  padding: 0 8px;
+}
+
+.session-loading {
+  padding: 16px;
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.session-empty {
+  padding: 40px 16px;
+}
+
+/* 会话项：整项可长按拖动，卡片与状态样式都在这三个 class 里 */
 .session-item {
   display: flex;
   align-items: center;
@@ -8,10 +77,10 @@
   padding: 10px 12px;
   margin-bottom: 4px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--app-radius-lg);
   cursor: pointer;
   font-size: 13px;
-  color: #666;
+  color: var(--app-text-secondary);
   font-weight: 400;
   /* 默认态是只读展示：不禁用的话点击/双击标题会拖出选区和插入点，看着像输入框 */
   -webkit-user-select: none;
@@ -20,17 +89,17 @@
 
 /* 当前会话 */
 .session-item.active {
-  background-color: #ffffff;
-  border-color: #e8e8e8;
+  background-color: var(--app-bg-container);
+  border-color: var(--app-border);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-  color: #333;
+  color: var(--app-text);
   font-weight: 500;
 }
 
 /* 拖拽中的条目 */
 .session-item.dragging {
   opacity: 0.5;
-  background-color: rgba(107, 159, 212, 0.1);
+  background-color: var(--app-fill-secondary);
 }
 
 /* 整项挂了 dnd-kit 的 tabindex，鼠标点击也会画轮廓；只给键盘留可见焦点 */
@@ -39,7 +108,7 @@
 }
 
 .session-item:focus-visible {
-  outline: 2px solid rgba(107, 159, 212, 0.5);
+  outline: 2px solid var(--app-primary);
   outline-offset: -2px;
 }
 
@@ -51,6 +120,15 @@
   white-space: nowrap;
 }
 
+/* 「⋯」菜单：原先用 inline opacity 按选中态切换，这里交给 class */
+.session-more {
+  opacity: 0;
+}
+
+.session-item.active .session-more {
+  opacity: 1;
+}
+
 /* 重命名编辑态例外，必须能选中、编辑、复制 */
 .session-item input,
 .session-item textarea {
@@ -58,15 +136,25 @@
   user-select: text;
 }
 
-/* Resize handle styles */
+/* 调宽手柄：定位原先写在 inline，一并收进 class */
 .resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
   background: transparent;
   transition: background-color 0.2s ease;
 }
 
-.resize-handle:hover,
+.resize-handle:hover {
+  background: var(--app-fill-secondary);
+}
+
 .resize-handle.resizing {
-  background: rgba(107, 159, 212, 0.3);
+  background: var(--app-border);
 }
 
 .resize-handle::after {
@@ -77,7 +165,7 @@
   transform: translate(-50%, -50%);
   width: 2px;
   height: 40px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--app-border);
   border-radius: 1px;
   opacity: 0;
   transition: opacity 0.2s ease;

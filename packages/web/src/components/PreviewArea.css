@@ -1,4 +1,12 @@
-/* Preview panel: tabs, code view, download */
+/* 预览面板：头部（antd Segmented + 原生文字按钮）、预览 iframe、代码视图
+   颜色取 App.tsx 桥出来的 --app-* 变量（源头是 antd token） */
+
+.preview-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-left: 1px solid var(--app-border-secondary);
+}
 
 .preview-header {
   display: flex;
@@ -6,32 +14,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-bottom: 1px solid #eee;
-}
-
-.preview-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.preview-tab {
-  padding: 4px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #999;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.preview-tab:hover {
-  color: #333;
-}
-
-.preview-tab.active {
-  color: #333;
-  background: #f0f0f0;
+  border-bottom: 1px solid var(--app-border-secondary);
 }
 
 .preview-actions {
@@ -39,15 +22,23 @@
   gap: 8px;
 }
 
-.preview-actions button {
-  padding: 4px 12px;
-  font-size: 13px;
-}
-
 .preview-body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  display: block;
+}
+
+/* iframe 常驻、只切显示：条件渲染会让它重新加载，丢掉生成应用的内部状态 */
+.preview-body.is-hidden {
+  display: none;
+}
+
+.preview-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 .preview-placeholder {
@@ -55,7 +46,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: var(--app-text-tertiary);
   font-size: 14px;
 }
 
@@ -70,11 +61,12 @@
   width: 180px;
   flex-shrink: 0;
   overflow-y: auto;
-  border-right: 1px solid #eee;
+  border-right: 1px solid var(--app-border-secondary);
   padding: 8px 0;
-  background: #fafafa;
+  background: var(--app-bg-layout);
 }
 
+/* 只在 >1 文件时出现；有意保留原生 button（antd 对应物 Menu 自带缩进与内边距） */
 .code-file {
   display: block;
   width: 100%;
@@ -88,17 +80,17 @@
 }
 
 .code-file:hover {
-  background: #f0f0f0;
+  background: var(--app-fill-tertiary);
 }
 
 .code-file.selected {
-  background: #ffffff;
-  border-left-color: #6b9fd4;
+  background: var(--app-bg-container);
+  border-left-color: var(--app-primary);
 }
 
 .code-file-path {
   word-break: break-all;
-  color: #333;
+  color: var(--app-text);
 }
 
 .code-viewer {
@@ -111,10 +103,10 @@
 .code-viewer-path {
   padding: 6px 12px;
   font-size: 12px;
-  color: #666;
+  color: var(--app-text-secondary);
   font-family: 'Consolas', 'Monaco', monospace;
-  border-bottom: 1px solid #eee;
-  background: #fcfcfc;
+  border-bottom: 1px solid var(--app-border-secondary);
+  background: var(--app-bg-container);
 }
 
 .code-content {
@@ -126,15 +118,15 @@
   font-size: 12px;
   line-height: 1.5;
   white-space: pre;
-  background: #fff;
+  background: var(--app-bg-container);
 }
 
 .code-note {
   padding: 6px 12px;
   font-size: 12px;
-  color: #b26a00;
-  background: #fff8e6;
-  border-top: 1px solid #f0e0c0;
+  color: var(--app-warning);
+  background: var(--app-fill-tertiary);
+  border-top: 1px solid var(--app-border-secondary);
 }
 
 .code-empty {
@@ -143,5 +135,5 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: #999;
+  color: var(--app-text-tertiary);
 }
