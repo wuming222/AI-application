@@ -3,11 +3,17 @@ import { ChatInterface } from './components/ChatInterface'
 import { MessageList } from './components/MessageList'
 import { PreviewArea } from './components/PreviewArea'
 import { Sidebar } from './components/Sidebar'
+import { useSessionStore } from './store/sessionStore'
 
 export default function App() {
   const [chatWidth, setChatWidth] = useState<number | null>(null)
   const dragging = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { sessions, currentSessionId } = useSessionStore()
+
+  // 获取当前会话标题
+  const currentSession = sessions.find(s => s.id === currentSessionId)
+  const headerTitle = currentSession?.title || 'AI App Generator'
 
   const onMouseDown = useCallback(() => {
     dragging.current = true
@@ -49,7 +55,7 @@ export default function App() {
           flex: chatWidth === null ? 1 : undefined,
         }}>
           <header style={{ padding: '12px 16px', borderBottom: '1px solid #eee', fontWeight: 600 }}>
-            AI App Generator
+            {headerTitle}
           </header>
           <MessageList />
           <ChatInterface />

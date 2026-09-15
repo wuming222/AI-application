@@ -1,13 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
+import { Input, Button, message as antdMessage } from 'antd'
+import { PaperClipOutlined, SendOutlined } from '@ant-design/icons'
 import { useChatStore } from '../store/chatStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
 import { useVoiceInput } from '../hooks/useVoiceInput'
+
+const { TextArea } = Input
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const { isStreaming, sendMessage, abort } = useChatStore()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<any>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { state: voiceState, transcript, start: startVoice, stop: stopVoice } = useVoiceInput()
   const lastTranscriptLen = useRef(0)
@@ -27,18 +31,28 @@ export function ChatInterface() {
     }
   }, [transcript, voiceState])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if ((!input.trim() && pendingImages.length === 0) || isStreaming) return
     sendMessage(input, pendingImages.length > 0 ? pendingImages : undefined)
     setInput('')
     setPendingImages([])
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
   const handleFiles = async (files: FileList | null) => {
     if (!files) return
     const remaining = MAX_IMAGES - pendingImages.length
-    if (remaining <= 0) return
+    if (remaining <= 0) {
+      antdMessage.warning(`最多只能上传 ${MAX_IMAGES} 张图片`)
+      return
+    }
     const toProcess = Array.from(files).slice(0, remaining)
     const compressed = await Promise.all(toProcess.map(compressImage))
     setPendingImages((prev) => [...prev, ...compressed])
@@ -53,7 +67,7 @@ export function ChatInterface() {
   const voiceDisabled = isStreaming || voiceState === 'connecting' || voiceState === 'stopping'
 
   return (
-    <form onSubmit={handleSubmit} style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
+    <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
       {pendingImages.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           {pendingImages.map((src, i) => (
@@ -76,66 +90,78 @@ export function ChatInterface() {
         </div>
       )}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: '#f5f5f5', borderRadius: 24, padding: '4px 4px 4px 16px',
+        background: '#f5f5f5',
+        borderRadius: 18,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+        padding: '12px 16px',
       }}>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
-        />
-        <button type="button" disabled={!canAttach} onClick={() => fileRef.current?.click()} style={{
-          border: 'none', background: 'transparent', cursor: canAttach ? 'pointer' : 'default',
-          fontSize: 18, padding: '4px 8px', opacity: canAttach ? 0.6 : 0.3, lineHeight: 1,
-        }}>
-          📎
-        </button>
-        <button
-          type="button"
-          disabled={voiceDisabled}
-          onClick={isRecording ? stopVoice : startVoice}
-          style={{
-            border: 'none', background: 'transparent',
-            cursor: voiceDisabled ? 'default' : 'pointer',
-            fontSize: 18, padding: '4px 8px', lineHeight: 1,
-            opacity: voiceDisabled ? 0.3 : 1,
-            color: isRecording ? '#ef4444' : 'inherit',
-            animation: isRecording ? 'pulse 1s ease-in-out infinite' : 'none',
-          }}
-        >
-          🎤
-        </button>
-        <input
+        <TextArea
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="输入消息..."
+          onKeyDown={handleKeyDown}
+          placeholder="输入消息...（Shift+Enter 换行）"
           disabled={isStreaming}
+          autoSize={{ minRows: 1, maxRows: 6 }}
+          variant="borderless"
           style={{
-            flex: 1, border: 'none', outline: 'none', background: 'transparent',
-            fontSize: 14, padding: '8px 0', minWidth: 0,
+            fontSize: 14,
+            resize: 'none',
+            marginBottom: 8,
           }}
         />
-        {isStreaming ? (
-          <button type="button" onClick={abort} style={{
-            padding: '8px 20px', border: 'none', borderRadius: 20, cursor: 'pointer',
-            background: '#ef4444', color: '#fff', fontSize: 14, fontWeight: 500,
-            whiteSpace: 'nowrap',
-          }}>
-            停止
-          </button>
-        ) : (
-          <button type="submit" disabled={isStreaming} style={{
-            padding: '8px 20px', border: 'none', borderRadius: 20, cursor: 'pointer',
-            background: '#1a73e8', color: '#fff', fontSize: 14, fontWeight: 500,
-            whiteSpace: 'nowrap', opacity: isStreaming ? 0.5 : 1,
-          }}>
-            发送
-          </button>
-        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
+            />
+            <Button
+              type="text"
+              disabled={!canAttach}
+              onClick={() => fileRef.current?.click()}
+              icon={<PaperClipOutlined />}
+              style={{ fontSize: 18, opacity: canAttach ? 0.6 : 0.3 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              type="text"
+              disabled={voiceDisabled}
+              onClick={isRecording ? stopVoice : startVoice}
+              style={{
+                fontSize: 18,
+                opacity: voiceDisabled ? 0.3 : 1,
+                color: isRecording ? '#ef4444' : 'inherit',
+                animation: isRecording ? 'pulse 1s ease-in-out infinite' : 'none',
+              }}
+            >
+              🎤
+            </Button>
+            {isStreaming ? (
+              <Button
+                type="primary"
+                danger
+                onClick={abort}
+                style={{ borderRadius: 20 }}
+              >
+                停止
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                onClick={() => handleSubmit()}
+                disabled={(!input.trim() && pendingImages.length === 0) || isStreaming}
+                icon={<SendOutlined />}
+                style={{ borderRadius: 20 }}
+              />
+            )}
+          </div>
+        </div>
       </div>
       <style>{`
         @keyframes pulse {
@@ -143,6 +169,6 @@ export function ChatInterface() {
           50% { opacity: 0.4; }
         }
       `}</style>
-    </form>
+    </div>
   )
 }
