@@ -112,10 +112,10 @@ function SortableSessionItem({
             <Button
               type="text"
               size="small"
+              className="session-more"
               icon={<MoreOutlined />}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
-              style={{ opacity: isActive ? 1 : 0 }}
             />
           </Dropdown>
         </>
@@ -227,21 +227,13 @@ export function Sidebar() {
   // 折叠状态
   if (collapsed) {
     return (
-      <div style={{ 
-        width: 48, 
-        borderRight: '1px solid #f0f0f0', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        paddingTop: 12,
-        background: '#fafafa',
-      }}>
+      <div className="sidebar-collapsed">
         <Tooltip title="展开侧边栏">
           <Button
             type="text"
+            className="sidebar-expand"
             icon={<MenuUnfoldOutlined />}
             onClick={() => setCollapsed(false)}
-            style={{ marginBottom: 8 }}
           />
         </Tooltip>
         <Tooltip title="新建会话">
@@ -257,24 +249,11 @@ export function Sidebar() {
 
   return (
     <>
-      <div style={{ 
-        width: sidebarWidth, 
-        borderRight: '1px solid #f0f0f0', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        background: '#fafafa',
-        position: 'relative',
-      }}>
+      <div className="sidebar" style={{ width: sidebarWidth }}>
         {/* Header */}
-        <div style={{ 
-          padding: '16px', 
-          borderBottom: '1px solid #f0f0f0', 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-        }}>
-          <span style={{ fontWeight: 600, fontSize: 15, color: '#333' }}>会话列表</span>
-          <div style={{ display: 'flex', gap: 4 }}>
+        <div className="sidebar-header">
+          <span className="sidebar-title">会话列表</span>
+          <div className="sidebar-actions">
             <Tooltip title="新建会话">
               <Button
                 type="text"
@@ -295,17 +274,17 @@ export function Sidebar() {
         </div>
 
         {/* Session List */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        <div className="session-list">
           {isLoading ? (
-            <div style={{ padding: 16, color: '#999', fontSize: 13, textAlign: 'center' }}>加载中...</div>
+            <div className="session-loading">加载中...</div>
           ) : sessions.length === 0 ? (
-            <div style={{ padding: '40px 16px' }}>
+            <div className="session-empty">
               <Empty description="暂无会话" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={sessions.map((s) => s.id)}>
-                <div style={{ padding: '0 8px' }}>
+                <div className="session-list-inner">
                   {sessions.map((session) => (
                     <SortableSessionItem
                       key={session.id}
@@ -331,15 +310,6 @@ export function Sidebar() {
         <div
           className={`resize-handle ${isResizing ? 'resizing' : ''}`}
           onMouseDown={handleResizeStart}
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 6,
-            cursor: 'col-resize',
-            zIndex: 10,
-          }}
         />
       </div>
     </>

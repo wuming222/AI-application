@@ -58,7 +58,7 @@ export function PreviewArea() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid #eee' }}>
+    <div className="preview-area">
       <div className="preview-header">
         <Segmented options={VIEW_OPTIONS} value={view} onChange={(v) => setView(v as PreviewView)} />
         <div className="preview-actions">
@@ -81,15 +81,15 @@ export function PreviewArea() {
         </div>
       </div>
 
-      {/* iframe 始终挂载，只切 display：条件渲染会让它重新加载，丢掉生成应用的内部状态 */}
-      <div className="preview-body" style={{ display: view === 'preview' ? 'block' : 'none' }}>
+      {/* iframe 始终挂载，只切显示：条件渲染会让它重新加载，丢掉生成应用的内部状态 */}
+      <div className={`preview-body ${view === 'preview' ? '' : 'is-hidden'}`}>
         {srcdoc !== null ? (
           <iframe
             key={manualKey}
             title="preview"
             srcDoc={srcdoc}
             sandbox="allow-scripts"
-            style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+            className="preview-frame"
           />
         ) : (
           <div className="preview-placeholder">生成 index.html 后可预览</div>

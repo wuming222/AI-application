@@ -7,9 +7,6 @@ import { useChatStore } from '../store/chatStore'
 import { AgentProgress } from './AgentProgress'
 import type { Message, ToolCall } from '../llm/types'
 
-// 展开内容限高内部滚动，避免在对话底部展开时大幅撑高列表、把点击行顶出视野
-const EXPAND_MAX_HEIGHT = 220
-
 function toggleIntoView(e: SyntheticEvent<HTMLDetailsElement>) {
   if (e.currentTarget.open) {
     e.currentTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -51,23 +48,14 @@ function ToolItem({ tc, result }: { tc: ToolCall; result?: string }) {
     // malformed args — show tool name only
   }
   return (
-    <details onToggle={toggleIntoView} style={{ marginBottom: 2 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 13, listStyle: 'none' }}>
+    <details onToggle={toggleIntoView} className="tool-item">
+      <summary className="tool-item-summary">
         🔧 {tc.function.name}
         {path && `: ${path}`}
       </summary>
-      <div
-        style={{
-          fontSize: 12,
-          color: '#666',
-          whiteSpace: 'pre-wrap',
-          marginTop: 4,
-          maxHeight: EXPAND_MAX_HEIGHT,
-          overflowY: 'auto',
-        }}
-      >
+      <div className="tool-item-detail">
         <div>入参：{prettyArgs(tc.function.arguments)}</div>
-        <div style={{ marginTop: 4 }}>结果：{result === undefined ? '（无返回）' : capText(result, 1000)}</div>
+        <div className="tool-item-result">结果：{result === undefined ? '（无返回）' : capText(result, 1000)}</div>
       </div>
     </details>
   )
@@ -95,26 +83,14 @@ function buildItems(messages: Message[]): Item[] {
 function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: Map<string, string> }) {
   const totalCalls = msgs.reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0)
   return (
-    <div
-      style={{
-        alignSelf: 'flex-start',
-        maxWidth: '75%',
-        padding: '10px 14px',
-        borderRadius: 12,
-        backgroundColor: '#fff',
-        color: '#333',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        lineHeight: 1.5,
-      }}
-    >
+    <div className="tool-bubble">
       <details open>
-        <summary style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, cursor: 'pointer', listStyle: 'none' }}>
+        <summary className="tool-bubble-summary">
           🔧 执行工具 {totalCalls} 次
         </summary>
         {msgs.map((m, i) => (
           <Fragment key={i}>
-            {m.content && <div style={{ marginBottom: 4 }}>{m.content}</div>}
+            {m.content && <div className="tool-round-text">{m.content}</div>}
             {m.tool_calls!.map((tc, j) => (
               <ToolItem key={tc.id || j} tc={tc} result={toolResults.get(tc.id)} />
             ))}
@@ -142,9 +118,9 @@ export function MessageList() {
   )
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="message-list">
       {messages.length === 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 200 }}>
+        <div className="message-list-empty">
           <Empty description="发送一条消息开始对话" />
         </div>
       )}
@@ -152,33 +128,14 @@ export function MessageList() {
         item.type === 'toolGroup' ? (
           <ToolGroupBubble key={i} msgs={item.msgs} toolResults={toolResults} />
         ) : (
-          <div
-            key={i}
-            className={`message-bubble message-bubble-${item.msg.role}`}
-            style={{
-              alignSelf: item.msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: 'min(75%, 800px)',
-              padding: '10px 14px',
-              borderRadius: 18,
-              backgroundColor: item.msg.role === 'user' ? '#6b9fd4' : '#ffffff',
-              color: item.msg.role === 'user' ? '#fff' : '#333',
-              boxShadow: item.msg.role === 'user' 
-                ? '0 2px 6px rgba(107, 159, 212, 0.2)' 
-                : '0 2px 6px rgba(0, 0, 0, 0.06)',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              lineHeight: 1.5,
-            }}
-          >
+          <div key={i} className={`message-bubble message-bubble-${item.msg.role}`}>
             <div className="message-markdown">
               <ReactMarkdown>{item.msg.content}</ReactMarkdown>
             </div>
             {item.msg.images && item.msg.images.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <div className="message-images">
                 {item.msg.images.map((src, j) => (
-                  <img key={j} src={src} alt="" style={{
-                    maxWidth: 120, maxHeight: 120, borderRadius: 6, border: '1px solid rgba(255,255,255,0.3)',
-                  }} />
+                  <img key={j} src={src} alt="" className="message-image" />
                 ))}
               </div>
             )}

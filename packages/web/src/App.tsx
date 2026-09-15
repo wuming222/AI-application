@@ -1,14 +1,47 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { theme } from 'antd'
 import { ChatInterface } from './components/ChatInterface'
 import { MessageList } from './components/MessageList'
 import { PreviewArea } from './components/PreviewArea'
 import { Sidebar } from './components/Sidebar'
 import { useSessionStore } from './store/sessionStore'
+import './App.css'
+
+/**
+ * antd v6 在这里没有把 token 暴露成全局 --ant-* 变量（实测组件节点上取不到），
+ * 所以把需要的 token 桥成自有 CSS 变量挂在根上，各组件的同名 .css 用 var() 取。
+ * 目的：颜色/圆角跟着 ConfigProvider 的主题与系统深色模式走，不在 css 里写死。
+ */
+function useThemeVars(): React.CSSProperties {
+  const { token } = theme.useToken()
+  return {
+    '--app-text': token.colorText,
+    '--app-text-secondary': token.colorTextSecondary,
+    '--app-text-tertiary': token.colorTextTertiary,
+    '--app-bg-container': token.colorBgContainer,
+    '--app-bg-layout': token.colorBgLayout,
+    '--app-border': token.colorBorder,
+    '--app-border-secondary': token.colorBorderSecondary,
+    '--app-split': token.colorSplit,
+    '--app-primary': token.colorPrimary,
+    '--app-info': token.colorInfo,
+    '--app-info-bg': token.colorInfoBg,
+    '--app-success': token.colorSuccess,
+    '--app-warning': token.colorWarning,
+    '--app-error': token.colorError,
+    '--app-fill-secondary': token.colorFillSecondary,
+    '--app-fill-tertiary': token.colorFillTertiary,
+    '--app-fill-quaternary': token.colorFillQuaternary,
+    '--app-radius': `${token.borderRadius}px`,
+    '--app-radius-lg': `${token.borderRadiusLG}px`,
+  } as React.CSSProperties
+}
 
 export default function App() {
   const [chatWidth, setChatWidth] = useState<number | null>(null)
   const dragging = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const themeVars = useThemeVars()
   const { sessions, currentSessionId } = useSessionStore()
 
   // 获取当前会话标题
@@ -46,30 +79,16 @@ export default function App() {
   }, [])
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell" style={themeVars}>
       <Sidebar />
-      <div ref={containerRef} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-        <div style={{
-          display: 'flex', flexDirection: 'column', minWidth: 0,
-          width: chatWidth ?? undefined,
-          flex: chatWidth === null ? 1 : undefined,
-        }}>
-          <header style={{ padding: '12px 16px', borderBottom: '1px solid #eee', fontWeight: 600 }}>
-            {headerTitle}
-          </header>
+      <div ref={containerRef} className="app-main">
+        <div className="app-chat" style={{ width: chatWidth ?? undefined, flex: chatWidth === null ? 1 : undefined }}>
+          <header className="app-chat-header">{headerTitle}</header>
           <MessageList />
           <ChatInterface />
         </div>
-        <div
-          onMouseDown={onMouseDown}
-          style={{
-            width: 5, cursor: 'col-resize', background: '#eee',
-            flexShrink: 0, transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#ccc' }}
-          onMouseLeave={(e) => { if (!dragging.current) e.currentTarget.style.background = '#eee' }}
-        />
-        <div style={{ flex: 1, minWidth: 280 }}>
+        <div className="chat-splitter" onMouseDown={onMouseDown} />
+        <div className="app-preview">
           <PreviewArea />
         </div>
       </div>

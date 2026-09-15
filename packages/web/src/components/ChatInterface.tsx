@@ -73,15 +73,13 @@ export function ChatInterface() {
   const voiceDisabled = isStreaming || voiceState === 'connecting' || voiceState === 'stopping'
 
   return (
-    <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
+    <div className="chat-composer">
       {pendingImages.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <div className="pending-images">
           {pendingImages.map((src, i) => (
-            <div key={i} style={{ position: 'relative', width: 60, height: 60 }}>
-              <img src={src} alt="" style={{
-                width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd',
-              }} />
-              {/* 有意保留原生 button：18px 圆形浮标不是 antd Button 的形态，样式收在 ChatInterface.css */}
+            <div key={i} className="pending-image-chip">
+              <img src={src} alt="" className="pending-image" />
+              {/* 有意保留原生 button：18px 圆形浮标不是 antd Button 的形态 */}
               {!isStreaming && (
                 <button type="button" className="image-remove" onClick={() => removeImage(i)}>
                   ✕
@@ -91,12 +89,7 @@ export function ChatInterface() {
           ))}
         </div>
       )}
-      <div style={{
-        background: '#f5f5f5',
-        borderRadius: 18,
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-        padding: '12px 16px',
-      }}>
+      <div className="composer-box">
         <TextArea
           ref={inputRef}
           value={input}
@@ -106,41 +99,32 @@ export function ChatInterface() {
           disabled={isStreaming}
           autoSize={{ minRows: 1, maxRows: 6 }}
           variant="borderless"
-          style={{
-            fontSize: 14,
-            resize: 'none',
-            marginBottom: 8,
-          }}
+          className="composer-input"
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="composer-toolbar">
           <div>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               multiple
-              style={{ display: 'none' }}
+              className="file-input"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
             />
             <Button
               type="text"
+              className="attach-btn"
               disabled={!canAttach}
               onClick={() => fileRef.current?.click()}
               icon={<PaperClipOutlined />}
-              style={{ fontSize: 18, opacity: canAttach ? 0.6 : 0.3 }}
             />
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="composer-actions">
             <Button
               type="text"
+              className={`voice-btn ${isRecording ? 'is-recording' : ''}`}
               disabled={voiceDisabled}
               onClick={isRecording ? stopVoice : startVoice}
-              style={{
-                fontSize: 18,
-                opacity: voiceDisabled ? 0.3 : 1,
-                color: isRecording ? '#ef4444' : 'inherit',
-                animation: isRecording ? 'pulse 1s ease-in-out infinite' : 'none',
-              }}
             >
               🎤
             </Button>
@@ -148,29 +132,23 @@ export function ChatInterface() {
               <Button
                 type="primary"
                 danger
+                className="send-btn"
                 onClick={abort}
-                style={{ borderRadius: 20 }}
               >
                 停止
               </Button>
             ) : (
               <Button
                 type="primary"
+                className="send-btn"
                 onClick={() => handleSubmit()}
                 disabled={(!input.trim() && pendingImages.length === 0) || isStreaming}
                 icon={<SendOutlined />}
-                style={{ borderRadius: 20 }}
               />
             )}
           </div>
         </div>
       </div>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
     </div>
   )
 }
