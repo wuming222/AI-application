@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Button, Segmented } from 'antd'
+import { Button, Segmented, Tooltip } from 'antd'
+import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import 'highlight.js/styles/github.css'
 import { highlightCode } from '../preview/highlight'
 import { useWorkspaceStore } from '../store/workspaceStore'
@@ -62,13 +63,21 @@ export function PreviewArea() {
         <Segmented options={VIEW_OPTIONS} value={view} onChange={(v) => setView(v as PreviewView)} />
         <div className="preview-actions">
           {view === 'preview' && (
-            <Button size="small" onClick={() => setManualKey((k) => k + 1)} disabled={srcdoc === null}>
-              刷新
-            </Button>
+            <Tooltip title="重新加载预览">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => setManualKey((k) => k + 1)}
+                disabled={srcdoc === null}
+              />
+            </Tooltip>
           )}
-          <Button size="small" onClick={downloadIndex} disabled={srcdoc === null}>
-            下载
-          </Button>
+          <Tooltip title="下载 index.html（资源已内联）">
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={downloadIndex}
+              disabled={srcdoc === null}
+            />
+          </Tooltip>
         </div>
       </div>
 

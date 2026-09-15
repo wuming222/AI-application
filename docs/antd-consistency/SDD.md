@@ -19,9 +19,11 @@
 - `VIEW_OPTIONS` 用 `{ label, value: PreviewView }[]` 定义，避免字符串比较与 `as` 散落
 - 删除 `PreviewArea.css` 里的 `.preview-tabs`、`.preview-tab`、`.preview-tab:hover`、`.preview-tab.active` 四段手写样式
 
-### 3. 刷新 / 下载 → `Button`
+### 3. 刷新 / 下载 → 图标化 `Button`
 - 文件：`PreviewArea.tsx`（`:72`、`:76`）
-- 换成 antd `Button`，`size="small"`，保留 `disabled={srcdoc === null}`
+- 换成 antd `Button`（默认带边框）+ 图标（`ReloadOutlined` / `DownloadOutlined`），**默认尺寸**以与左侧 `Segmented` 的 32px 高度对齐；说明文字移到 `Tooltip`；保留 `disabled={srcdoc === null}`
+- 不用文字按钮的理由：antd 会给两字中文标签自动插一个字距，渲染成「刷 新」「下 载」
+- 不保留 `type="text"` 的理由：图标色本来就已经是最深的 `colorText`（`rgba(0,0,0,0.88)`），显淡不是颜色浅，而是**完全没有边框与底色**、控件轮廓不存在，加上 24px 在 32px 的 Segmented 旁边显小
 - 刷新仍只在预览视图显示；`downloadIndex` 逻辑不动
 - 删掉 `.preview-actions button` 这条为裸按钮写的补丁样式
 
@@ -38,7 +40,7 @@
 ## 验收标准
 - [x] `grep -rn "<button" packages/web/src` 只剩 2 处（`ChatInterface.tsx:86`、`PreviewArea.tsx:101`），两处都有就近注释说明保留理由
 - [x] 预览/代码切换由 `Segmented` 承担，切换行为与之前一致（实测来回切 iframe 仍是同一 DOM 节点，代码视图 534 个高亮 span 正常）
-- [x] 刷新、下载是 antd `Button`（`.ant-btn`），未生成 index.html 时禁用，点击下载仍产出 Blob
+- [x] 刷新、下载是 antd 默认带边框的图标按钮，实测 32×32 与左侧 `Segmented` 同高；Tooltip 给出说明；点击下载仍产出 8944 字节的 Blob；无产物时为禁用态；代码视图下只剩下载、刷新按预期隐藏
 - [x] Sidebar 新建/收起按钮出现 antd Tooltip（实测 `.ant-tooltip` 渲染出；原生 `title` 属性已不存在）
 - [ ] 图片移除角标外观与改前一致，点击仍能移除 —— 需要真实上传文件才会渲染出角标，未实测（仅确认样式值逐条搬进 `.image-remove`，未改动数值）
 - [x] 手写 `.preview-tab*` 与 `.preview-actions button` 样式已删，无死规则
