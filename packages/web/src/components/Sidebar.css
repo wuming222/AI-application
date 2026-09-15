@@ -5,9 +5,32 @@
   justify-content: space-between;
   gap: 8px;
   overflow: hidden;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  font-weight: 400;
   /* 默认态是只读展示：不禁用的话点击/双击标题会拖出选区和插入点，看着像输入框 */
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* 当前会话 */
+.session-item.active {
+  background-color: #ffffff;
+  border-color: #e8e8e8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  color: #333;
+  font-weight: 500;
+}
+
+/* 拖拽中的条目 */
+.session-item.dragging {
+  opacity: 0.5;
+  background-color: rgba(107, 159, 212, 0.1);
 }
 
 /* 整项挂了 dnd-kit 的 tabindex，鼠标点击也会画轮廓；只给键盘留可见焦点 */
@@ -33,11 +56,6 @@
 .session-item textarea {
   -webkit-user-select: text;
   user-select: text;
-}
-
-.session-item.dragging {
-  opacity: 0.5;
-  background-color: rgba(107, 159, 212, 0.1);
 }
 
 /* Resize handle styles */

@@ -48,30 +48,20 @@ function SortableSessionItem({
     id: session.id,
   })
 
+  // 只放必须动态计算的两项；卡片与状态样式交给 .session-item / .active / .dragging，
+  // 否则 inline style 会覆盖 CSS 里的状态规则（实测曾让拖拽高亮失效）
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    // 保留 dnd-kit 的 transform 过渡，同时保留选中态的背景/边框变化过渡
-    transition: [transition, 'background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease']
+    transition: [transition, 'background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease']
       .filter(Boolean)
       .join(', '),
-    opacity: isDragging ? 0.5 : 1,
-    padding: '10px 12px',
-    marginBottom: 4,
-    cursor: 'pointer',
-    background: isActive ? '#ffffff' : 'transparent',
-    borderRadius: 8,
-    border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
-    boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
-    fontSize: 13,
-    color: isActive ? '#333' : '#666',
-    fontWeight: isActive ? 500 : 400,
   }
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`session-item ${isDragging ? 'dragging' : ''}`}
+      className={`session-item ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''}`}
       onClick={() => switchSession(session.id)}
       {...attributes}
       {...(isEditing ? {} : listeners)}
