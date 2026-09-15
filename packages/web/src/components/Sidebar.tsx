@@ -7,8 +7,6 @@ import {
   MoreOutlined,
   EditOutlined,
   DeleteOutlined,
-  MessageOutlined,
-  DragOutlined,
 } from '@ant-design/icons'
 import { DndContext, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
@@ -32,7 +30,8 @@ interface SortableSessionItemProps {
   switchSession: (id: string) => void
 }
 
-// Sortable session item component
+// 整条会话项即可拖动：卡片样式与 dnd-kit 的 ref/transform/listeners 必须落在同一个节点上，
+// 否则只有内层在位移，卡片视觉与位置会错位
 function SortableSessionItem({ 
   session, 
   isActive, 
@@ -49,28 +48,24 @@ function SortableSessionItem({
     id: session.id,
   })
 
-  const style = {
+  // 只放必须动态计算的两项；卡片与状态样式交给 .session-item / .active / .dragging，
+  // 否则 inline style 会覆盖 CSS 里的状态规则（实测曾让拖拽高亮失效）
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+    transition: [transition, 'background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease']
+      .filter(Boolean)
+      .join(', '),
   }
 
   return (
     <div
       ref={setNodeRef}
       style={style}
+      className={`session-item ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''}`}
       onClick={() => switchSession(session.id)}
-      className={`session-item ${isDragging ? 'dragging' : ''}`}
+      {...attributes}
+      {...(isEditing ? {} : listeners)}
     >
-      {/* Drag handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="drag-handle"
-      >
-        <DragOutlined />
-      </div>
-
       {isEditing ? (
         <Input
           autoFocus
@@ -87,18 +82,7 @@ function SortableSessionItem({
         />
       ) : (
         <>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ 
-              overflow: 'hidden', 
-              textOverflow: 'ellipsis', 
-              whiteSpace: 'nowrap',
-              color: isActive ? '#333' : '#666',
-              fontWeight: isActive ? 500 : 400,
-            }}>
-              <MessageOutlined style={{ marginRight: 6, color: '#6b9fd4' }} />
-              {session.title}
-            </div>
-          </div>
+          <div className="session-item-title">{session.title}</div>
           <Dropdown
             menu={{
               items: [
@@ -129,6 +113,7 @@ function SortableSessionItem({
               type="text"
               size="small"
               icon={<MoreOutlined />}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               style={{ opacity: isActive ? 1 : 0 }}
             />
@@ -156,7 +141,9 @@ export function Sidebar() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px movement before drag starts
+        // 长按 250ms 才进入拖拽；期间移动超过 5px 视为点击/滚动，取消激活
+        delay: 250,
+        tolerance: 5,
       },
     })
   )
@@ -313,42 +300,21 @@ export function Sidebar() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={sessions.map((s) => s.id)}>
                 <div style={{ padding: '0 8px' }}>
-                  {sessions.map((session) => {
-                    const isActive = session.id === currentSessionId
-                    
-                    return (
-                      <div
-                        key={session.id}
-                        style={{
-                          padding: '10px 12px',
-                          marginBottom: 4,
-                          cursor: 'pointer',
-                          background: isActive ? '#ffffff' : 'transparent',
-                          borderRadius: 8,
-                          border: isActive ? '1px solid #e8e8e8' : '1px solid transparent',
-                          boxShadow: isActive ? '0 2px 6px rgba(0, 0, 0, 0.04)' : 'none',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          fontSize: 13,
-                          transition: 'all 0.2s ease',
-                        }}
-                      >
-                        <SortableSessionItem
-                          session={session}
-                          isActive={isActive}
-                          isEditing={editingId === session.id}
-                          editTitle={editTitle}
-                          setEditTitle={setEditTitle}
-                          submitRename={submitRename}
-                          setEditingId={setEditingId}
-                          handleRename={handleRename}
-                          handleDelete={handleDelete}
-                          switchSession={switchSession}
-                        />
-                      </div>
-                    )
-                  })}
+                  {sessions.map((session) => (
+                    <SortableSessionItem
+                      key={session.id}
+                      session={session}
+                      isActive={session.id === currentSessionId}
+                      isEditing={editingId === session.id}
+                      editTitle={editTitle}
+                      setEditTitle={setEditTitle}
+                      submitRename={submitRename}
+                      setEditingId={setEditingId}
+                      handleRename={handleRename}
+                      handleDelete={handleDelete}
+                      switchSession={switchSession}
+                    />
+                  ))}
                 </div>
               </SortableContext>
             </DndContext>

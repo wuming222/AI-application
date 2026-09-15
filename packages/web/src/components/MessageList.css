@@ -1,5 +1,11 @@
 /* Markdown content styles for assistant messages */
 
+/* 气泡上的 inline pre-wrap 会继承进来，把 react-markdown 输出的裸 \n 文本节点
+   逐条渲染成换行，与块级排版叠加出多余空行；这里断开继承 */
+.message-markdown {
+  white-space: normal;
+}
+
 .message-markdown h1,
 .message-markdown h2,
 .message-markdown h3,
