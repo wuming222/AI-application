@@ -6,6 +6,7 @@ import './MessageList.css'
 import { useChatStore } from '../store/chatStore'
 import { useSessionStore } from '../store/sessionStore'
 import { AgentProgress } from './AgentProgress'
+import { isPinnedToBottom, followScrollTop } from '../utils/chatScroll'
 import type { Message, ToolCall } from '../llm/types'
 
 const NO_MESSAGES: Message[] = []
@@ -110,11 +111,45 @@ export function MessageList() {
   const messages = slice?.messages ?? NO_MESSAGES
   const isStreaming = slice?.isStreaming ?? false
   const progress = slice?.progress ?? null
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  // 用户是否贴在底部：只由 scroll 事件更新。等内容变长后再量几何会失真 —— 新行刚插进来
+  // 必然差着一行高度，那时判会把自己误判成"用户翻上去了"，从此再不追滚。
+  const pinnedRef = useRef(true)
+  const frameRef = useRef<number | null>(null)
 
+  // 一帧最多滚一次：emitProgress 是每 token 一次，直接写就等于每秒十几次强制布局
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (frameRef.current !== null) return
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null
+      const el = listRef.current
+      if (!el) return
+      const target = followScrollTop(el, pinnedRef.current)
+      if (target !== null) el.scrollTop = target
+    })
   }, [messages, progress])
+
+  // 换会话是"跳到那条会话的最新处"，不延续上一条的浏览位置
+  useEffect(() => {
+    pinnedRef.current = true
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [currentSessionId])
+
+  useEffect(
+    () => () => {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+      // 必须一起置空：StrictMode 下 effect 是 setup → cleanup → setup，
+      // 留着已取消的 id 会让后面每次 setup 都被上面的守卫早退，追滚永久失效。
+      frameRef.current = null
+    },
+    [],
+  )
+
+  const handleScroll = () => {
+    const el = listRef.current
+    if (el) pinnedRef.current = isPinnedToBottom(el)
+  }
 
   const toolResults = new Map(
     messages
@@ -123,7 +158,7 @@ export function MessageList() {
   )
 
   return (
-    <div className="message-list">
+    <div className="message-list" ref={listRef} onScroll={handleScroll}>
       {messages.length === 0 && !isStreaming && (
         <div className="message-list-empty">
           <Empty description="发送一条消息开始对话" />
@@ -148,7 +183,6 @@ export function MessageList() {
         ),
       )}
       {isStreaming && progress && <AgentProgress progress={progress} />}
-      <div ref={bottomRef} />
     </div>
   )
 }

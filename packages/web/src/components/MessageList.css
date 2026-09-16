@@ -5,7 +5,8 @@
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 var(--space-4);
+  /* 底部留白原先由列表末尾的占位空 div 靠 gap 撑出，改追滚方式后由容器自己留 */
+  padding: 0 var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

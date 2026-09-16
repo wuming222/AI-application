@@ -17,9 +17,9 @@
 | `pnpm install` | 安装依赖 |
 | `pnpm dev` | 前端 Vite dev server（默认 5173） |
 | `pnpm dev:server` | 后端 `uvicorn app.main:app --reload --port 8000` |
-| `pnpm --filter web test:run` | 前端单测（vitest，当前 25 用例） |
+| `pnpm --filter web test:run` | 前端单测（vitest，当前 52 用例） |
 | `pnpm --filter web lint` | oxlint |
-| `pnpm build` | `tsc -b && vite build` — **当前会失败**，见「已知坑」 |
+| `pnpm build` | `tsc -b && vite build` — 通过；只剩主 chunk 体积提示，见「已知坑」 |
 
 Python 依赖：`packages/server/pyproject.toml`（fastapi / uvicorn / httpx / python-dotenv / websockets）。Windows 下没有 `pip` 命令，用 `python -m pip install ...`。
 
@@ -65,6 +65,7 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - 开了 `noUnusedLocals` / `noUnusedParameters`：残留的未使用导入直接让构建失败。
 - 技术栈固定：React 19 + Ant Design 6 + Zustand 5 + Vite。
 - **样式归属**：状态样式与布局样式写在同名 `.css` 的 class 里（如 `Sidebar.css`、`PreviewArea.css`），JSX 的 `style` 只放运行时才知道值的动态量（transform、用户决定的宽度）。同节点上的 inline style 会覆盖 `.css` 里的状态规则，已踩过：`.session-item.dragging` 的高亮被 inline `background` 盖掉。
+- **流式追滚**：不要用 `scrollIntoView({ behavior: 'smooth' })` 追流式输出 —— `emitProgress()` 每个 SSE chunk 调一次（思考阶段每 token 一次），补间动画会被下一次调用重新起坡，观感就是抖动；且它会连带滚动祖先可滚动容器，外层是 `app-shell` 嵌套 flex 时会多滚一层。当前做法：写 `el.scrollTop` + 贴底判定（`utils/chatScroll.ts`）+ rAF 合帧。**贴底状态只能由 `scroll` 事件更新**，在内容变长之后现判几何会把"贴底"误判成"用户翻上去了"，从此再不追滚。**rAF 待办标记要与句柄同生同灭**：cleanup 里 `cancelAnimationFrame` 之后必须把 `frameRef.current` 置空，否则 dev 下 StrictMode 的 setup→cleanup→setup 会让后续每次追滚都被 `!== null` 守卫早退（追滚整体失效，而单测和生产构建都不复现，只能靠浏览器实测抓到）。
 - **取值（两层，别混）**：
   - 静态尺度 → `src/styles/tokens.css`：`--space-1..5`(4/8/12/16/32)、`--radius-xs|sm|lg|pill|full`(4/8/12/18/999)、`--font-xs..xl`(12/13/14/16/18)、`--shadow-sm|md|lg`、`--motion-fast|base`、`--font-mono`。组件 `.css` 里不要再写字面 px。
   - 主题派生颜色 → `App.tsx` 的 `useThemeVars()` 桥成 `--app-*`。antd v6 在这里**没有**把 token 暴露成全局 `--ant-*` 变量（实测组件节点上 `getPropertyValue('--ant-color-text')` 取不到），所以必须运行时从 `theme.useToken()` 取；`main.tsx` 已配 `colorPrimary` 与跟随系统的 `darkAlgorithm`，写死的颜色在深色模式下会和 antd 表面打架。圆角/间距/字号不要搬回这个桥，否则同一值两套来源。
@@ -100,9 +101,12 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 
 ## 已知坑
 
-1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 935 kB / gzip 304 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（46 用例），build 绿不代表交互没问题。**
+1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 936 kB / gzip 305 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（52 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
 4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/preview-error-capture/SDD.md`）。
-5. 单测覆盖 agent / llm / store / preview 的纯逻辑（46 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。
+5. 单测覆盖 agent / llm / store / preview / utils 的纯逻辑（52 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。组件级行为（effect 清理、StrictMode 双跑）单测同样抓不到，见坑 6。
 6. **浏览器实测的时序**：一次生成的中间态只存在几秒，而 `evaluate_script` 单程往返就要几秒到几十秒，定点轮询必然错过窗口 —— 要在触发前先在页面里装采样器（`setInterval` 记录 DOM 状态变化到 `window.__log__`），跑完再取。另外这类链路可以离线验证：用一个假 SSE 后端（按 Responses 事件顺序下发，可控静默时长）替掉真实上游，把 `VITE_API_BASE_URL` 指过去，既不消耗模型调用又能复现协议时序。
+   - **内嵌 Browser 面板可能整段时间是 hidden**：`document.visibilityState === 'hidden'` 时 `requestAnimationFrame` **一帧都不发**，所以追滚、动画、任何 rAF 合帧的逻辑在面板里根本跑不出行为（`take_screenshot` 也会以 `NATIVE_BROWSER_VIEWPORT_UNAVAILABLE` 失败）。要测这类代码就自启一个无头实例：`chrome.exe --headless=new --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=<临时目录> http://localhost:5173/`，用 Node 内置 `WebSocket` 连 CDP `Runtime.evaluate`（`awaitPromise: true`），在页面里一次跑完"装钩子 → 驱动 UI → 逐帧采样 → 返回 JSON"。脚本放在 `node_modules/.scratch/`（`fake-llm.mjs` + `cdp-scroll-probe.mjs`），**`pnpm install` 会清掉**，重跑按本条描述重建。
+   - 逐帧采样要同时记 `scrollHeight`/`clientHeight`：只看"脚本层写了几个值"证明不了观感，"离底部的滞后量 + 滞后帧占比"才是。
+   - 换过一次组件源码再跑 A/B 时，`git show main:<file> > <file>` 可能被 vite 按 mtime 缓存成空模块，写完 `touch` 一下并 `curl` 该模块确认内容非空。
