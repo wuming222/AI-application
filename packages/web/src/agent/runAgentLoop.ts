@@ -3,7 +3,7 @@ import { streamChat } from '../llm/router'
 import { registry } from './toolRegistry'
 import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
-import type { AgentLoopOptions, AgentProgress, AgentProgressStep, AgentToolCallInfo } from './types'
+import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
 
@@ -19,8 +19,7 @@ const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想�
 2. 不使用 fetch 或动态 import。
 3. 修改已有文件时，优先使用 edit_file 进行局部替换。仅在需要大幅重写时才用 write_file。修改前先 read_file 查看当前内容。`
 
-function buildSystemPrompt(): string {
-  const files = useWorkspaceStore.getState().getCurrentFiles()
+function buildSystemPrompt(files: Record<string, string>): string {
   const listing = Object.keys(files)
     .sort()
     .map((p) => `- ${p} (${files[p].length} 字符)`)
@@ -31,11 +30,12 @@ function buildSystemPrompt(): string {
 
 export async function runAgentLoop(
   messages: Message[],
-  options?: AgentLoopOptions,
+  options: AgentLoopOptions,
 ): Promise<{ finalText: string; updatedMessages: Message[] }> {
-  const maxRounds = options?.maxRounds ?? DEFAULT_MAX_ROUNDS
-  const signal = options?.signal
-  const onProgress = options?.onProgress
+  const maxRounds = options.maxRounds ?? DEFAULT_MAX_ROUNDS
+  const signal = options.signal
+  const onProgress = options.onProgress
+  const toolCtx: ToolContext = { sessionId: options.sessionId }
   const startAt = Date.now()
 
   const steps: AgentProgressStep[] = []
@@ -60,7 +60,9 @@ export async function runAgentLoop(
 
       // 每轮组装：system 注入最新文件清单 + 历史按两阶段截断（只影响 LLM payload，不改 store）
       if (allMessages[0]?.role === 'system') {
-        allMessages[0].content = buildSystemPrompt()
+        allMessages[0].content = buildSystemPrompt(
+          useWorkspaceStore.getState().filesFor(toolCtx.sessionId),
+        )
       }
       const payload = truncateMessages(allMessages, limits)
 
@@ -131,7 +133,7 @@ export async function runAgentLoop(
       for (let i = 0; i < toolCalls.length; i++) {
         const tc = toolCalls[i]
         const args = safeParseArgs(tc.function.arguments)
-        const result = await registry.execute(tc.function.name, args)
+        const result = await registry.execute(tc.function.name, args, toolCtx)
 
         allMessages.push({ role: 'tool', tool_call_id: tc.id, content: result })
 

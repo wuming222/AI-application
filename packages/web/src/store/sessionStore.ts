@@ -76,12 +76,11 @@ export const useSessionStore = create<SessionState>((set) => ({
   createOrReuseSession: async (): Promise<string> => {
     const { currentSessionId, createSession } = useSessionStore.getState()
     const chat = useChatStore.getState()
-    const workspace = useWorkspaceStore.getState()
-    const loadedForCurrent =
-      !!currentSessionId &&
-      chat.messagesSessionId === currentSessionId &&
-      workspace.currentSessionId === currentSessionId
-    if (loadedForCurrent && chat.messages.length === 0 && Object.keys(workspace.getCurrentFiles()).length === 0) {
+    if (
+      currentSessionId &&
+      useWorkspaceStore.getState().currentSessionId === currentSessionId &&
+      chat.isEmptySession(currentSessionId)
+    ) {
       chat.requestComposerFocus()
       return currentSessionId
     }
@@ -94,12 +93,15 @@ export const useSessionStore = create<SessionState>((set) => ({
   },
 
   deleteSession: async (id: string) => {
+    const chat = useChatStore.getState()
+    if (chat.streamSessionId === id) chat.abortStream()
     await apiDeleteSession(id)
+    useChatStore.getState().dropSession(id)
     set((s) => {
       const sessions = s.sessions.filter((sess) => sess.id !== id)
       const currentSessionId =
         s.currentSessionId === id ? (sessions[0]?.id ?? null) : s.currentSessionId
-      
+
       // Update saved order after deletion
       try {
         const savedOrder = localStorage.getItem('session-order')
@@ -110,14 +112,13 @@ export const useSessionStore = create<SessionState>((set) => ({
       } catch (e) {
         console.warn('Failed to update session order in localStorage:', e)
       }
-      
+
       return { sessions, currentSessionId }
     })
     const newCurrent = useSessionStore.getState().currentSessionId
     if (newCurrent) {
       useChatStore.getState().loadSession(newCurrent)
     } else {
-      useChatStore.setState({ messages: [], messagesSessionId: null })
       useWorkspaceStore.getState().setCurrentSession('')
     }
   },

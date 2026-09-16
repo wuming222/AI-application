@@ -296,3 +296,54 @@ Agent 生成完代码就撒手了：预览里报了什么错、应用是不是�
 - [x] 令牌用法与两层拆分写进 `AGENTS.md`
 - [x] `--app-*` 桥删掉圆角，只留颜色（避免同一值两套来源）
 - [ ] 深色模式观感逐屏确认
+
+## 会话交流中切换会话，状态全部丢失且串台
+
+### 问题描述
+正在一条会话里对话（生成中）时切到别的会话，出现四种混乱：新会话的对话记录看不到、原会话「第 1 轮思考中」的进度跑到新会话界面上、切过去显示的却还是刚才那条会话的内容、整体状态错乱。
+
+### 根因（代码级）
+聊天状态是**全局单槽**，而界面是多会话 —— `chatStore.ts:27-30` 只有一份 `messages / isStreaming / progress`，`loadSession()` 整体替换它们；正在运行的循环不知道已被切走，会继续写这一份：
+
+| 现象 | 路径 |
+|---|---|
+| 切走后仍显示旧会话内容 | `chatStore.ts:94` 循环收尾 `set({ messages: result.updatedMessages })`，把旧会话的数组盖到当前视图 |
+| 进度跑错界面 | `chatStore.ts:89-91` `onProgress` 写入无归属的 `progress`；`loadSession` 清过一次，但循环立刻又推进来 |
+| 对话记录「丢了」 | 一整轮跑完才 `saveMessages`（`:96-101`）。中途切走 → 服务端没有这一轮 → 切回来 `fetchMessages` 拿到旧数据 |
+| 输入框被别处锁住 / 停错对象 | `isStreaming` 与 `abortController`（`:24`）全局唯一：人在 B 却被 A 的流锁住（`:67`），`abort()` 停的也是 A |
+| **生成的代码消失** | A 的 `write_file` 落进 B 的 workspace（见下），而收尾时 `saveWorkspace(A, getCurrentFiles())` 把 **B 的文件集**写给了 A；`PUT /api/sessions/{id}/workspace` 是**全量覆盖**（`sessions.py:172-176`，`ON CONFLICT DO UPDATE SET files = excluded.files`）→ A 原先已存的代码被直接覆写掉，看起来就是"不知道跑哪去了" |
+| **空态与「第 1 轮思考中」同屏不消失** | `MessageList` 的空态只看 `messages.length === 0`，进度条只看全局 `isStreaming && progress`，两者都不问"这条会话是不是正在生成"。切到空的 B 时：B 没消息 → 空态在；A 的进度还在推 → 「思考中」同时出现 |
+
+另有两条同源缺陷：
+
+1. **数据串号（最严重）**：切到 B 后直接发消息，`sessionId` 取的是 B（`:69`），`allMessages` 却可能是 A 的数组（`:85`）→ 把 A 的上下文当成 B 的历史发给模型，并存进 B。
+2. **虚拟文件系统同样跟着「当前会话」走**：`workspaceStore.writeFile` 用 `get().currentSessionId`（`workspaceStore.ts:31`），A 在后台继续跑时它的 `write_file` / `edit_file` 会落到**当前打开的 B** 的 workspace；收尾的 `saveWorkspace(sessionId, getCurrentFiles())`（`chatStore.ts:103-104`）再把 B 的文件集按**全量覆盖**写进 A 的工作区。
+
+### 已确认的处理决策
+1. **后台继续跑，归属原会话**：切走不中断生成，跑完只写回它自己那条会话；`messages / progress / isStreaming` 按 sessionId 分片，视图读 `bySession[currentSessionId]`
+2. **整轮才落库**：保持现状。被打断（abort、刷新、关页）时这一轮直接丢弃，不出现半截 assistant 消息与悬空 tool 结果
+3. **同时只一路**：全局最多一个流。在另一条会话点发送时，先打断正在跑的那一路并给出可见提示，再开新的
+
+### 必修项（不列入选项）
+- 流式状态按会话隔离，且**循环的所有写入都定向到发起时的 sessionId**，不写全局槽
+- 发送前保证历史取自**该会话自己的分片**（分片化后 `messagesSessionId` 这类补丁字段不再需要，已删除）
+- `write_file` / `edit_file` / `delete_file` / `saveWorkspace` 显式携带 sessionId，不再隐式取 `currentSessionId`
+- 进度条与空态都按会话判定：`AgentProgress` 只在"该会话自己正在生成"时渲染；空态条件改为"该会话无消息**且**该会话没有进行中的生成"，两者不再互相打架
+- `saveWorkspace` 是**全量覆盖**语义，因此只允许写回该会话自己的文件集；归属错一条就会抹掉别人已存的代码，需要显式防护（宁可不写也不要写错目标）
+
+### 边界场景
+- 删除正在生成的那条会话 → 先中止该流，不向已删除会话写库
+- 切回仍在生成的会话 → 能看到进行中的进度与已产出内容（分片还在更新）
+- 生成中触发新建会话（`createOrReuseSession` / `createSession`）→ 既不打断原流，也不让原流写进新会话
+- 被打断的那一路：其会话切片回到本轮开始前的状态
+
+### 待办
+- [x] 出 SDD（`docs/session-state-isolation/SDD.md`：分片结构 + 流的生命周期 + 代际标记）
+- [x] chatStore 按会话分片（`bySession` + `streamSessionId`），循环写入定向到发起会话
+- [x] 发送的历史只取该会话分片（结构性消除串号）
+- [x] workspaceStore 工具读写显式带 sessionId，`toolRegistry` 经 `ToolContext` 传递
+- [x] `saveWorkspace` 只写回本会话文件集（全量覆盖语义下宁可不写）
+- [x] 进度与空态按会话判定（消除「发送一条消息开始对话」与「第 1 轮思考中」同屏）
+- [x] 删除会话 / 他处发送 的打断与可见提示
+- [x] 单测：新增 6 个隔离用例，`test:run` 32/32；`tsc` 归零，`pnpm build` 首次通过
+- [ ] 真实模型调用下的端到端复现（A 生成中切到 B 再切回）—— 要花一次请求，留给你实操或明确让我跑

@@ -1,5 +1,3 @@
-import { useWorkspaceStore } from '../store/workspaceStore'
-
 function normalizePath(path: string): string {
   return path.replace(/^\/+/, '').replace(/\/+/g, '/').replace(/\/$/, '')
 }
@@ -75,8 +73,4 @@ export function buildSrcdoc(files: Record<string, string>): string | null {
   )
 
   return html
-}
-
-export function getPreviewSrcdoc(): string | null {
-  return buildSrcdoc(useWorkspaceStore.getState().getCurrentFiles())
 }

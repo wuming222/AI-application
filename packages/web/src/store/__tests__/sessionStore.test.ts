@@ -37,8 +37,14 @@ function setState(opts: {
       : [],
   })
   useChatStore.setState({
-    messages: opts.chat?.messages ?? [],
-    messagesSessionId: opts.chat?.sessionId ?? opts.session,
+    bySession: {
+      [opts.chat?.sessionId ?? (opts.session as string)]: {
+        messages: opts.chat?.messages ?? [],
+        progress: null,
+        isStreaming: false,
+      },
+    },
+    streamSessionId: null,
   })
   useWorkspaceStore.setState({
     currentSessionId: opts.workspace?.sessionId ?? opts.session,
@@ -51,7 +57,7 @@ function setState(opts: {
 describe('createOrReuseSession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useChatStore.setState({ composerFocusTick: 0, isStreaming: false, progress: null })
+    useChatStore.setState({ bySession: {}, streamSessionId: null, composerFocusTick: 0 })
   })
 
   it('当前会话没有任何内容时复用，不发新建请求', async () => {
@@ -93,8 +99,18 @@ describe('createOrReuseSession', () => {
     expect(id).toBe('brand-new')
   })
 
-  it('消息还属于上一条会话时（切换未完成）不复用', async () => {
+  it('工作区指针还没跟上（切换的异步窗口）时不复用', async () => {
     setState({ session: 's2', chat: { sessionId: 's1', messages: [] }, workspace: { sessionId: 's1', files: {} } })
+
+    const id = await useSessionStore.getState().createOrReuseSession()
+
+    expect(api.createSession).toHaveBeenCalledTimes(1)
+    expect(id).toBe('brand-new')
+  })
+
+  it('该会话正在生成时不复用，照常新建', async () => {
+    setState({ session: 's1', chat: { sessionId: 's1', messages: [] } })
+    useChatStore.setState({ streamSessionId: 's1' })
 
     const id = await useSessionStore.getState().createOrReuseSession()
 

@@ -7,69 +7,65 @@ function normalizePath(path: string): string {
 interface WorkspaceState {
   filesBySession: Record<string, Record<string, string>>
   currentSessionId: string | null
-  writeFile: (path: string, content: string) => string
-  readFile: (path: string) => string
-  listFiles: () => string[]
-  deleteFile: (path: string) => string
-  editFile: (path: string, oldString: string, newString: string) => string
+  filesFor: (sessionId: string) => Record<string, string>
+  writeFile: (sessionId: string, path: string, content: string) => string
+  readFile: (sessionId: string, path: string) => string
+  listFiles: (sessionId: string) => string
+  deleteFile: (sessionId: string, path: string) => string
+  editFile: (sessionId: string, path: string, oldString: string, newString: string) => string
   setCurrentSession: (sessionId: string) => void
   loadWorkspace: (sessionId: string, files: Record<string, string>) => void
-  getCurrentFiles: () => Record<string, string>
 }
 
+/**
+ * 所有读写都显式带 sessionId。
+ * 后台那一路生成可以在用户切走之后继续写文件，隐式取"当前会话"会把它的产物
+ * 落进用户此刻正打开的另一条会话（并且收尾的全量覆盖 PUT 会抹掉那边的代码）。
+ */
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   filesBySession: {},
   currentSessionId: null,
 
-  getCurrentFiles: () => {
-    const sid = get().currentSessionId
-    if (!sid) return {}
-    return get().filesBySession[sid] ?? {}
-  },
+  filesFor: (sessionId) => get().filesBySession[sessionId] ?? {},
 
-  writeFile: (path, content) => {
+  writeFile: (sessionId, path, content) => {
     const normalized = normalizePath(path)
-    const sid = get().currentSessionId
-    if (!sid) return '错误: 无活跃会话'
     set((s) => {
-      const sessionFiles = { ...(s.filesBySession[sid] ?? {}), [normalized]: content }
-      return { filesBySession: { ...s.filesBySession, [sid]: sessionFiles } }
+      const sessionFiles = { ...(s.filesBySession[sessionId] ?? {}), [normalized]: content }
+      return { filesBySession: { ...s.filesBySession, [sessionId]: sessionFiles } }
     })
     return `已写入 ${normalized} (${content.length} 字节)`
   },
 
-  readFile: (path) => {
+  readFile: (sessionId, path) => {
     const normalized = normalizePath(path)
-    const files = get().getCurrentFiles()
-    const content = files[normalized]
+    const content = (get().filesBySession[sessionId] ?? {})[normalized]
     if (content === undefined) {
       return `错误: 文件不存在 ${normalized}`
     }
     return content
   },
 
-  listFiles: () => {
-    const keys = Object.keys(get().getCurrentFiles()).sort()
+  listFiles: (sessionId) => {
+    const keys = Object.keys(get().filesBySession[sessionId] ?? {}).sort()
     return keys.length === 0 ? '(空)' : keys.join('\n')
   },
 
-  deleteFile: (path) => {
+  deleteFile: (sessionId, path) => {
     const normalized = normalizePath(path)
-    const sid = get().currentSessionId
-    if (!sid) return '错误: 无活跃会话'
-    const files = get().filesBySession[sid] ?? {}
+    const files = get().filesBySession[sessionId] ?? {}
     if (!(normalized in files)) {
       return `错误: 文件不存在 ${normalized}`
     }
     set((s) => {
-      const sessionFiles = { ...s.filesBySession[sid] }
+      const sessionFiles = { ...s.filesBySession[sessionId] }
       delete sessionFiles[normalized]
-      return { filesBySession: { ...s.filesBySession, [sid]: sessionFiles } }
+      return { filesBySession: { ...s.filesBySession, [sessionId]: sessionFiles } }
     })
     return `已删除 ${normalized}`
   },
 
-  editFile: (path, oldString, newString) => {
+  editFile: (sessionId, path, oldString, newString) => {
     if (!oldString) {
       return '提示: oldString 为空。如需创建或覆盖文件，请使用 write_file。'
     }
@@ -77,9 +73,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return '错误: oldString 与 newString 相同，无需修改。'
     }
     const normalized = normalizePath(path)
-    const sid = get().currentSessionId
-    if (!sid) return '错误: 无活跃会话'
-    const files = get().filesBySession[sid] ?? {}
+    const files = get().filesBySession[sessionId] ?? {}
     if (!(normalized in files)) {
       return `错误: 文件不存在 ${normalized}`
     }
@@ -98,8 +92,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     const updated = content.replace(oldString, newString)
     set((s) => {
-      const sessionFiles = { ...s.filesBySession[sid], [normalized]: updated }
-      return { filesBySession: { ...s.filesBySession, [sid]: sessionFiles } }
+      const sessionFiles = { ...s.filesBySession[sessionId], [normalized]: updated }
+      return { filesBySession: { ...s.filesBySession, [sessionId]: sessionFiles } }
     })
     return `已编辑 ${normalized}（替换 1 处）`
   },
