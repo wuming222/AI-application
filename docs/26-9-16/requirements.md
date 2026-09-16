@@ -66,3 +66,59 @@ response.completed                         → 才 yield { done:true, tool_calls
 - `function_call_arguments.delta` 靠 `event.item_id` 回查 `pendingFunctionCalls`（`responses.ts:161-167`）。若上游这个字段与 `added` 时的 `item.id` 不一致，参数会**静默丢失**、工具拿到空 `arguments`。要确认得抓一次真实 SSE，本轮按决定不做实测
 - 上游究竟是否分片下发 `function_call_arguments.delta` 未实测（见订正 ③ 末），影响"卡住的这段时间到底有没有字节"
 - 逐字流式正文按会话回传仍不在范围内（与 `preview-error-capture`、`session-state-isolation` 里记的是同一件事）
+
+## 追问：显示工具时把首轮思考收起
+
+第一条需求做完后，思考文字与工具行同时展开占住对话流。要求改成：**进入工具执行就把首轮思考收起来**，内容保留、可点开。
+已实现（`9213c2c`，随分支合入 main）：`status === 'thinking'` 时展开逐字可见，切到 `tool-call` / `done` 时同一份文本换到默认收起的原生 `<details>`（summary 为「💭 思考过程」）。用原生 `details` 而非 antd `Collapse` 的理由就地注明：与 `MessageList` 的工具气泡同形态，Collapse 的面板边框在这个 pill 里过重。
+验收：离线假上游实测容器高 782 → 142、`details.open === false`、点 summary 回到 1577 且文本完整。
+
+## 流式期间对话流频繁抖动
+
+### 问题描述
+思考过程逐字输出时，对话流一直小幅来回蹭；从"思考中"切到"执行工具"的那一瞬间还会猛地弹一下。
+
+### 机制（代码级）
+抖的是**滚动**，不是列表长度：
+
+- 改前 `MessageList.tsx` 的追滚 effect 是 `useEffect(..., [messages, progress])` → 每次触发 `scrollIntoView({ behavior: 'smooth' })`；
+- `runAgentLoop.ts:103` 的 `emitProgress()` 是**每个 SSE chunk 调一次**，思考阶段每 token 一次，一秒十几到几十次；
+- smooth 是异步补间动画，目标位置在动画中途被改写、又被下一次调用重新起坡 → 观感就是抖动。
+
+`scrollIntoView` 另有一个毛病：它会连带滚动祖先可滚动容器，而外层是 `app-shell` 嵌套 flex，可能多滚一层。
+
+### 结论：不上虚拟列表
+`.message-list` 里一共几个气泡节点，不是渲染开销问题。虚拟列表治不了补间互相打断，只会给 key 稳定性和纯逻辑测试添负担，症状照旧。
+
+### 方案（已确认）
+改成直接操作 `scrollTop` 的瞬时赋值，配两个必要条件：
+
+1. **贴底才追**：`scrollHeight - scrollTop - clientHeight < 阈值` 时才滚，用户往上翻看历史时不拽回底部；
+2. **合帧**：`scrollHeight` 是读操作、会强制 flush layout，每秒十几到几十次同步赋值等于十几次强制重排；用 rAF 记账，一帧最多滚一次。
+
+### 待办
+- [x] 抽一个纯逻辑的滚动决策函数（输入 `scrollHeight/scrollTop/clientHeight` + 是否贴底，输出目标 scrollTop），便于单测
+  → `packages/web/src/utils/chatScroll.ts`：`isPinnedToBottom`（阈值 120px）+ `followScrollTop`（不贴底返回 null，内容变矮不回填）
+- [x] `MessageList` 换成 `listRef` + `scrollTop` 赋值 + rAF 待办标记，去掉 `bottomRef` 与 `scrollIntoView`
+- [x] 补单测：贴底时追、用户上翻后不追、一帧内多次变更只滚一次
+  → `pnpm --filter web test:run`：**52 passed**（`utils/__tests__/chatScroll.test.ts` 6 例：阈值边界 120/121、追滚目标、不贴底不追、到底不重复写、内容变矮不回填、不足一屏不滚）
+- [x] 浏览器实测：离线假上游采样 `scrollTop` 序列，确认无补间回弹、静默期不再刷滚动、上翻不被拽回
+  → 无头 Chrome（`--headless=new`）+ CDP 逐帧采样，改前/改后跑同一套脚本（`node_modules/.scratch/cdp-scroll-probe.mjs`，上游 `fake-llm.mjs`，**零模型调用**）：
+
+  | 观测项 | 改前（scrollIntoView smooth） | 改后（scrollTop + rAF） |
+  |---|---|---|
+  | 贴底滞后 | max **778px**，126 帧里 **100 帧**滞后 >80px（一直在追） | max **44px**，滞后 >80px 的帧 **0** |
+  | 方向反转 | 0 | 0 |
+  | JS 层写入 | 走原生补间动画，脚本层 0 次赋值 | **118 次**，`maxWritesPerFrame = 1`（每帧最多一次） |
+  | 用户上翻 500px | 仍被继续滚动（0 → 39）；滚回底部时 top 1539 而 bottom 2190，**差 651px 没跟上** | 写入 **0 次**、位置停在 440 不动；回到底部后 top == bottom == 2178，追滚恢复 |
+  | 生成途中切会话再切回 | top **25** / bottom 3118，**没落到该会话底部** | top **3084** == bottom 3084，正好落底 |
+  | 函数调用参数静默窗口（3s） | — | 写入 **0 次** |
+
+  `pnpm build` 绿（936.36 kB / gzip 304.68），`lint` 仅 1 条既有告警（`Sidebar.tsx:155` exhaustive-deps）。
+
+### 实测顺带抓到的缺陷：追滚在 StrictMode 下整个失效
+第一版实现里 cleanup 只 `cancelAnimationFrame(id)`，没把 `frameRef.current` 置空。dev 下 React StrictMode 会把 effect 跑成 setup → cleanup → setup，第二次 setup 之后每次追滚都被 `frameRef.current !== null` 的守卫早退 —— **生产构建不复现（StrictMode 不双跑），单测也不复现（测的是纯逻辑函数，没经过组件）**，只有浏览器实测抓到：思考文字把列表撑到 1526px，`scrollTop` 全程 0、写入 0 次。
+
+修法：cleanup 里取消之后一并 `frameRef.current = null`（"已取消"就等于"无待办帧"，这条不变量就地写进注释）。
+
+- [x] 待办标记与 rAF 句柄同生同灭：取消即置空，否则 StrictMode 双跑会把追滚永久锁死
