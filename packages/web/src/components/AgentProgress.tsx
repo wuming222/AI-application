@@ -58,11 +58,17 @@ export function AgentProgress({ progress }: AgentProgressProps) {
               ✓ 第 {step.round} 轮完成
             </span>
           )}
-          {/* reasoning 与 status 解耦：状态切到执行工具时，不能把用户刚看完的推理文字整块抽走 */}
-          {step.round === 1 && step.reasoningText && (
+          {/* reasoning 与 status 解耦：状态切到执行工具时不能把内容抽走，但要收起，别占满对话流 */}
+          {step.round === 1 && step.reasoningText && step.status === 'thinking' && (
             <div className="agent-reasoning">
               {step.reasoningText}
             </div>
+          )}
+          {step.round === 1 && step.reasoningText && step.status !== 'thinking' && (
+            <details className="agent-reasoning-collapsed">
+              <summary className="agent-reasoning-summary">💭 思考过程</summary>
+              <div className="agent-reasoning">{step.reasoningText}</div>
+            </details>
           )}
         </div>
       ))}

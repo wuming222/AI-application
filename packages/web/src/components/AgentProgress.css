@@ -82,6 +82,22 @@
   transition: all var(--motion-base);
 }
 
+/* 开始执行工具后收起首轮思考。这里保留原生 details 而不用 antd Collapse：
+   与 MessageList 的工具气泡同形态，Collapse 的面板边框与内边距在这个 pill 容器里过重 */
+.agent-reasoning-collapsed {
+  margin-top: var(--space-3);
+}
+
+.agent-reasoning-collapsed .agent-reasoning {
+  margin-top: var(--space-2);
+}
+
+.agent-reasoning-summary {
+  cursor: pointer;
+  font-size: var(--font-sm);
+  color: var(--app-text-tertiary);
+}
+
 .tool-run {
   margin-left: var(--space-4);
   font-weight: 500;

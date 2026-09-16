@@ -90,6 +90,10 @@ export function stallNoticeFor(idleMs: number, now: number): string | null
   改成 spinner/「第 N 轮思考中」随 status 走，`step.round === 1 && step.reasoningText` 的正文
   在任何 status 下都保留。
 - 「第 N 轮执行工具:」标题下的每一行仍是 `⏳ / ✓ / 🔍`；无 `path` 时不渲染空括号（现有条件已成立，加测试守住）。
+- **收起而不是抽走**（实现后追加的需求）：`status === 'thinking'` 时 reasoning 展开、逐字可见；
+  一旦进入 `tool-call` / `done`，同一份文本换到默认收起的 `<details>` 里，summary 为「💭 思考过程」。
+  用原生 `details` 而不用 antd `Collapse` —— 与 `MessageList` 的工具气泡同形态，Collapse 的面板边框与内边距
+  在这个 pill 容器里过重（已在 `.css` 里就地注明）。
 - 组件内用 `useRef` 记 `progress` 最近一次变化的时刻，`setInterval(1000)` 驱动本地 state 重渲染，
   超过 `STALL_NOTICE_MS` 时多渲染一行提示（`第 N 秒无新进展，可能在生成大文件，可点停止`）；
   `useEffect` 卸载清 timer。progress 一变就重置基准，工具行转 ✓ 也会重置。
@@ -121,6 +125,7 @@ export function stallNoticeFor(idleMs: number, now: number): string | null
 - [x] `AgentProgressStep` 无 `thinkingText`，`tsc` 通过即证明无消费方被破坏
 - [x] `thinkingText` 已按方案删除（未保留为"本轮正文"，因无渲染方）
 - [x] status 从 `thinking` → `tool-call` 时 round 1 的 reasoning 文本仍在 DOM（实测 t=9 同一 step 内两者并存）
+- [x] 进入 `tool-call` 后该文本收起成单行「💭 思考过程」，点 summary 可展开（实测：容器高 782 → 142，静默 8s 恒为 142；`summary.click()` 后 `open=true`、高回到 1577、文本完整。测量时视口仅 618px 宽，绝对高度因此被放大，取的是同一内容下的前后对比）
 - [x] 无进展提示渲染（实测：临时把阈值降到 3s 后，提示出现并逐秒 3→41 递增，进度变化后自动消失；`STALL_NOTICE_MS` 已改回 30_000 并由 `stallWatch.test.ts` 锁定）
 - [x] 提示不改变 `isStreaming`、不触发 abort（实测：提示出现后 41s 仍在流，「停止」按钮仍可用）
 - [x] **跨会话**：A 生成中切到 B → B 只有空态、无 progress 节点、无气泡、无 iframe；切回 A → 内容完整（实测）
