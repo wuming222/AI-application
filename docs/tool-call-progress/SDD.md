@@ -108,19 +108,23 @@ export function stallNoticeFor(idleMs: number, now: number): string | null
 `AGENTS.md`「状态不变量」补一条：**长时间无正文产出的阶段（尤其函数调用参数流式期间）必须有可见状态**，
 新增 LLM 事件类型时同步检查它是否走到了 `emitProgress`。这是本次 bug 的通用形态。
 
-## 验收标准
+## 验收标准（结果）
 
-- [ ] 单测全绿（现有 32 + 本次新增），`tsc -b` 无错，`pnpm build` 绿
-- [ ] `added(function_call)` 事件后，store 里该会话分片的 `progress.steps[last].status === 'tool-call'` 且工具行 `status==='running'`
-- [ ] `function_call_arguments.delta` 期间 `mergeToolCalls` 不产生第二行同名工具
-- [ ] `response.completed` 到达但 `registry.execute` 未返回时，工具行仍为 `running`（不提前 ✓）
-- [ ] 先 `web_search` 后 `write_file` 的同一轮，两行都在，`write_file` 不被丢弃
-- [ ] 一轮内两个 `write_file`（不同 callId）各自独立转 ✓，不互相错位
-- [ ] `AgentProgressStep` 不再存在 `thinkingText` 字段，`tsc` 通过即证明无消费方被破坏
-- [ ] status 从 `thinking` 切到 `tool-call` 时，round 1 的 reasoning 文本仍在 DOM 中（跨状态保留）
-- [ ] 无进展提示：`progress` 对象 30s 未变化时渲染提示行；期间任何一次 `onProgress` 都重置计时
-- [ ] 超时提示不改变 `isStreaming`、不触发 `abortStream`（单测或代码走查证据）
-- [ ] **跨会话**：A 会话生成中切到 B，A 的 `function_calls` 事件只写进 `bySession[A]`；B 的分片与 progress 不受影响
-- [ ] **生成中中断**：A 停在"执行工具 ⏳ write_file"时点停止，A 的分片回到本轮开始前，不残留 running 行
-- [ ] 浏览器实测：发一条"做个记账小应用"，思考文字结束后**立刻**出现「执行工具：⏳ write_file」且 thinking 文字未消失，文件写完后转 ✓，全程无 30s 空窗
-- [ ] 浏览器实测：`window.__probe__` 式的 progress 打点确认 `emitProgress` 在 `added` 时刻被调用过（不靠肉眼猜）
+单测：`pnpm --filter web test:run` → 46 passed（原 32 + toolProgress 6 + stallWatch 4 + responses 4）；`tsc -b` 无错；`pnpm build` 绿（主 chunk 935 kB，+1.5 kB）。
+浏览器：用离线假 Responses 上游（`node_modules/.scratch/fake-llm.mjs`，可控静默时长）+ 页面内采样器，**未消耗真实模型调用**。采样时间线（相对发送）：`t=7` 第 1 轮思考中 → `t=8` reasoning 文字出现 → `t=9` 「第 1 轮执行工具: ⏳write_file」且 reasoning 仍在同一步 → 静默期始终单行 → 结束后收起，会话里出现「🔧 执行工具 1 次 / 🔧 write_file: index.html」，预览 iframe `srcdoc` 982 字符。
+
+- [x] 单测全绿 + `tsc -b` 无错 + `pnpm build` 绿
+- [x] `added(function_call)` 后该会话分片 `steps[last].status === 'tool-call'` 且工具行 `running`（实测 t=9；`responses.test.ts` 断言 yield）
+- [x] `function_call_arguments.delta` 期间不产生第二行（实测 40s 静默窗内恒为一行；`toolProgress.test.ts` 同 callId 不重复）
+- [x] 先 `web_search` 后 `write_file` 两行都在（`toolProgress.test.ts`，锁住旧按名 find 的丢事件 bug）
+- [x] 一轮内两个同名工具按 callId 各自独立（`toolProgress.test.ts`）
+- [x] `AgentProgressStep` 无 `thinkingText`，`tsc` 通过即证明无消费方被破坏
+- [x] `thinkingText` 已按方案删除（未保留为"本轮正文"，因无渲染方）
+- [x] status 从 `thinking` → `tool-call` 时 round 1 的 reasoning 文本仍在 DOM（实测 t=9 同一 step 内两者并存）
+- [x] 无进展提示渲染（实测：临时把阈值降到 3s 后，提示出现并逐秒 3→41 递增，进度变化后自动消失；`STALL_NOTICE_MS` 已改回 30_000 并由 `stallWatch.test.ts` 锁定）
+- [x] 提示不改变 `isStreaming`、不触发 abort（实测：提示出现后 41s 仍在流，「停止」按钮仍可用）
+- [x] **跨会话**：A 生成中切到 B → B 只有空态、无 progress 节点、无气泡、无 iframe；切回 A → 内容完整（实测）
+- [x] 参数未齐时不渲染空括号（实测工具行为「⏳write_file」无 `()`）
+- [ ] `response.completed` 与 `registry.execute` 之间不提前打勾：**仅由代码位置 + 单测（done 不回退）保证**，静默窗内未看到 ✓，但没有精确复现该边界
+- [ ] **生成中点「停止」回到本轮开始**：本轮未重测（该路径未被改动，由 `chatStore.test.ts` 覆盖）
+- [x] 浏览器实测「思考结束后立刻出现执行工具且 thinking 不消失」：以假上游完成；**真实模型（qwen）这一路径尚未实测**，且 `function_call_arguments.delta` 的 `item_id` 一致性仍未验证（见需求文档风险条）

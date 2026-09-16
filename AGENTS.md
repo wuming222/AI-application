@@ -90,6 +90,7 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - **聊天状态按会话分片**：`chatStore.bySession[sessionId] = { messages, progress, isStreaming }`。不允许全局单槽的会话状态 —— 单槽会让后台那一路把旧会话的消息/进度画到用户当前看的会话上。
 - **视图只读当前会话那一片**：`MessageList` / `ChatInterface` 都用 `currentSessionId` 去取分片；空态的条件是"该会话无消息**且**该会话没在生成"。
 - **循环写入必须定向**：`runAgentLoop` 的 `onProgress` 和收尾 `set` 只能写回发起时捕获的 `sessionId`；用自增的代际标记（`streamSeq`）挡住被顶替/已中止那一路的迟到写入，结果作废就不写库。
+- **进度必须覆盖"无正文产出"的阶段**：模型吐函数调用参数时一个字也不会产出（一个完整 HTML 几千 token、几十秒），provider 不显式 yield 界面就冻在最后一条 thinking 上。现有链路：`responses.ts` 在 `output_item.added(function_call)` yield `function_calls` → `runAgentLoop` 用 `mergeToolCalls` 立刻把该步置成 `tool-call` 并标 `running`，`registry.execute` 返回才转 `done`。**新增任何 LLM 事件类型时先问一句：它是否走到了 `emitProgress`？** 长时间没有可渲染事件的阶段还要有无进展提示（`agent/stallWatch.ts`，只提示不中断）。
 - **工具与工作区读写显式带 sessionId**：`workspaceStore` 的所有方法首参都是 `sessionId`，`toolRegistry` 通过 `ToolContext` 拿。任何"隐式读 `currentSessionId`"的写法，都会让后台生成把文件写进用户当前打开的另一条会话。
 - **落库时机**：整轮跑完才 `saveMessages` / `saveWorkspace`；中断即丢，避免半截 assistant 与悬空 tool 结果。`saveWorkspace` 是**全量覆盖**（`PUT /sessions/:id/workspace` 用 `ON CONFLICT DO UPDATE`），所以目标会话写错就是抹掉别人的代码 —— 宁可不写。
 - **同时只一路**：`streamSessionId` 全局唯一；在别的会话发送时先 `abortStream()` 那一路并 `antdMessage.info` 明确提示，被中断那一路的分片回到本轮开始前。
@@ -99,8 +100,9 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 
 ## 已知坑
 
-1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 934 kB / gzip 304 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（32 用例），build 绿不代表交互没问题。**
+1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 935 kB / gzip 304 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（46 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
 4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/preview-error-capture/SDD.md`）。
-5. 单测覆盖 agent / llm / store / preview 的纯逻辑（25 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。
+5. 单测覆盖 agent / llm / store / preview 的纯逻辑（46 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。
+6. **浏览器实测的时序**：一次生成的中间态只存在几秒，而 `evaluate_script` 单程往返就要几秒到几十秒，定点轮询必然错过窗口 —— 要在触发前先在页面里装采样器（`setInterval` 记录 DOM 状态变化到 `window.__log__`），跑完再取。另外这类链路可以离线验证：用一个假 SSE 后端（按 Responses 事件顺序下发，可控静默时长）替掉真实上游，把 `VITE_API_BASE_URL` 指过去，既不消耗模型调用又能复现协议时序。

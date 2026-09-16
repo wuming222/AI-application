@@ -52,14 +52,15 @@ response.completed                         → 才 yield { done:true, tool_calls
 - `runAgentLoop.ts:116-121` 现在用 `toolCalls.map` **整表覆盖** `step.toolCalls`，会把 `added` 时建立的 running 行重置一遍。合并而非覆盖。
 
 ### 待办
-- [ ] 出 SDD（含上面三处订正与实现约束）
-- [ ] `responses.ts`：`function_call` 的 `added` 事件 yield 工具状态（新通道 `pending_tools` 或改造 `built_in_tools`，按 `call_id` 对齐）
-- [ ] `runAgentLoop`：收到即把该步置为 `tool-call` 并标 `running`，`registry.execute` 返回后才 `done`；与已有 `toolCalls` 合并不覆盖
-- [ ] `AgentProgress`：reasoning 块与 `status` 解耦，跨状态保留
-- [ ] 无事件计时挂在进度侧（wall-clock，阈值取常量，文案可见；不自动 abort）
-- [ ] 处置 `thinkingText`（默认：删字段）
-- [ ] 事件 → step 状态映射补单测（纯逻辑，可测：`added` 不丢、同名不串、completed 不改 done）
-- [ ] 浏览器实测：生成一个应用，确认思考结束后立刻出现「执行工具：⏳ write_file」且 thinking 文字不消失，文件写完后转 ✓
+- [x] 出 SDD（含上面三处订正与实现约束）→ `docs/tool-call-progress/SDD.md`
+- [x] `responses.ts`：`function_call` 的 `added` 事件 yield 工具状态（新开 `function_calls` 通道，按 `callId` 对齐，未复用 `built_in_tools`）
+- [x] `runAgentLoop`：收到即把该步置为 `tool-call` 并标 `running`，`registry.execute` 返回后才 `done`；与已有 `toolCalls` 合并不覆盖（`agent/toolProgress.ts` 的 `mergeToolCalls`）
+- [x] `AgentProgress`：reasoning 块与 `status` 解耦，跨状态保留
+- [x] 无事件计时挂在进度侧（wall-clock，阈值取常量 `STALL_NOTICE_MS = 30_000`，文案可见；不自动 abort）
+- [x] 处置 `thinkingText`：删字段
+- [x] 事件 → step 状态映射补单测（`toolProgress.test.ts` + `responses.test.ts`：`added` 不丢、同名不串、completed 不改 done）
+- [x] 浏览器实测：离线伪造 Responses 上游跑通全链路（`GAP_MS=90000` 静默窗口），确认思考结束后立刻出现「执行工具：⏳ write_file」且 thinking 文字未消失，无空括号，文件写完后转 ✓
+- [ ] 真实模型（qwen）这一路径未实测：`added` 事件yield 与 `item_id` 一致性仍需一次线上抓包确认
 
 ### 已知未验证的风险（本轮不处理，先记下来）
 - `function_call_arguments.delta` 靠 `event.item_id` 回查 `pendingFunctionCalls`（`responses.ts:161-167`）。若上游这个字段与 `added` 时的 `item.id` 不一致，参数会**静默丢失**、工具拿到空 `arguments`。要确认得抓一次真实 SSE，本轮按决定不做实测
