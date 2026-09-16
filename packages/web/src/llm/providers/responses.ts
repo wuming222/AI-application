@@ -1,4 +1,4 @@
-import type { Message, StreamChunk, ToolCall, BuiltInToolStatus } from '../types'
+import type { Message, StreamChunk, ToolCall, BuiltInToolStatus, FunctionCallStatus } from '../types'
 import type { StreamChatOptions } from '../router'
 
 export function toResponsesInput(messages: Message[]): Record<string, unknown>[] {
@@ -106,6 +106,7 @@ export async function* streamResponses(
   let buffer = ''
   let sawText = false
   const pendingFunctionCalls = new Map<string, ToolCall>()
+  const functionCallStatuses = new Map<string, FunctionCallStatus>()
   const activeBuiltInTools: BuiltInToolStatus[] = []
 
   const warnIfEmpty = (reason: string, extra?: unknown) => {
@@ -148,14 +149,21 @@ export async function* streamResponses(
 
         if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
           const itemId = event.item.id || `call_${pendingFunctionCalls.size}`
+          const rawArgs = event.item.arguments || ''
           pendingFunctionCalls.set(itemId, {
             id: itemId,
             type: 'function',
             function: {
               name: event.item.name || '',
-              arguments: event.item.arguments || '',
+              arguments: rawArgs,
             },
           })
+          functionCallStatuses.set(itemId, {
+            callId: itemId,
+            name: event.item.name || '',
+            ...(rawArgs ? { args: safeParseArgs(rawArgs) } : {}),
+          })
+          yield { delta: '', done: false, function_calls: [...functionCallStatuses.values()] }
         }
 
         if (event.type === 'response.function_call_arguments.delta') {
@@ -206,4 +214,13 @@ export async function* streamResponses(
   const toolCalls = Array.from(pendingFunctionCalls.values())
   warnIfEmpty('流提前中断，未收到 response.completed')
   yield { delta: '', done: true, tool_calls: toolCalls.length > 0 ? toolCalls : undefined }
+}
+
+function safeParseArgs(argsStr: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(argsStr)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
 }

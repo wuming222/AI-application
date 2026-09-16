@@ -105,6 +105,15 @@
   font-weight: 500;
 }
 
+/* 无进展提示：语气是"提示"不是"报错"，所以用三级文本色 + 虚线分隔 */
+.agent-stall {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--app-border-secondary);
+  font-size: var(--font-xs);
+  color: var(--app-text-tertiary);
+}
+
 @media (max-width: 768px) {
   .agent-progress-container {
     max-width: 85%;

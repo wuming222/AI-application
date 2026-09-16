@@ -24,10 +24,19 @@ export interface BuiltInToolStatus {
   status: 'in_progress' | 'searching' | 'completed'
 }
 
+// 模型刚开始吐某个函数调用（参数可能还没流完）时的可见状态。
+// 与 built_in_tools 分开：那条通道按工具名合并，会让后到的函数调用被挤掉。
+export interface FunctionCallStatus {
+  callId: string
+  name: string
+  args?: Record<string, unknown>
+}
+
 export interface StreamChunk {
   delta: string
   done: boolean
   tool_calls?: ToolCall[]
   reasoning?: string
   built_in_tools?: BuiltInToolStatus[]
+  function_calls?: FunctionCallStatus[]
 }
