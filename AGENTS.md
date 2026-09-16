@@ -78,8 +78,10 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 
 ## 工作流程约定
 
-- 每日需求记在 `docs/YY-M-D/requirements.md`（日期不补零，如 `docs/26-9-15/`）。当天没有目录就先建。
-- 每个特性一份轻量 SDD：`docs/{feature-key}/SDD.md`。
+`docs/` 分两个父目录：`docs/origin/` 放原始需求与外部输入，`docs/SDD/` 放产出方案。
+
+- 每日需求记在 `docs/origin/YY-M-D.md`（日期不补零，如 `docs/origin/26-9-15.md`）。当天没有文件就新建。
+- 每个特性一份轻量 SDD：`docs/SDD/{feature-key}/SDD.md`。一个特性有多份文件（如 `ai-app-gen-mvp` 的 SDD-MVP1~6）时同放该目录；`personal-check` / `personal-review` 的 `test-report.md`、`review-report.md` 也落这层。特性的外部输入与需求澄清放对应的 `docs/origin/{feature-key}/`。
 - 开发在 `feature/{name}` 分支上做，base 为 `main`，合并用 `--no-ff` 保留 merge commit（与历史一致）。
 - 有 personal 系列 skill 可用：`personal-plan` → `personal-develop` → `personal-check` → `personal-review`，或用 `personal-workflow` 总控批量跑完当日需求。
 - `.claude/personal-workflow.json` 是本地流程状态文件，已 gitignore，不要提交。
@@ -97,14 +99,14 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - **同时只一路**：`streamSessionId` 全局唯一；在别的会话发送时先 `abortStream()` 那一路并 `antdMessage.info` 明确提示，被中断那一路的分片回到本轮开始前。
 - **删除会话**：若删的正是生成中的那条，先中止再落库/清分片。
 
-改这类代码前必答的两个问题：**这段状态属于哪条会话？生成进行到一半时切换会话会怎样？** 两者都要在 `docs/{key}/SDD.md` 的验收标准里落成可勾的跨会话用例。
+改这类代码前必答的两个问题：**这段状态属于哪条会话？生成进行到一半时切换会话会怎样？** 两者都要在 `docs/SDD/{key}/SDD.md` 的验收标准里落成可勾的跨会话用例。
 
 ## 已知坑
 
 1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 936 kB / gzip 305 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（52 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
-4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/preview-error-capture/SDD.md`）。
+4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/SDD/preview-error-capture/SDD.md`）。
 5. 单测覆盖 agent / llm / store / preview / utils 的纯逻辑（52 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。组件级行为（effect 清理、StrictMode 双跑）单测同样抓不到，见坑 6。
 6. **浏览器实测的时序**：一次生成的中间态只存在几秒，而 `evaluate_script` 单程往返就要几秒到几十秒，定点轮询必然错过窗口 —— 要在触发前先在页面里装采样器（`setInterval` 记录 DOM 状态变化到 `window.__log__`），跑完再取。另外这类链路可以离线验证：用一个假 SSE 后端（按 Responses 事件顺序下发，可控静默时长）替掉真实上游，把 `VITE_API_BASE_URL` 指过去，既不消耗模型调用又能复现协议时序。
    - **内嵌 Browser 面板可能整段时间是 hidden**：`document.visibilityState === 'hidden'` 时 `requestAnimationFrame` **一帧都不发**，所以追滚、动画、任何 rAF 合帧的逻辑在面板里根本跑不出行为（`take_screenshot` 也会以 `NATIVE_BROWSER_VIEWPORT_UNAVAILABLE` 失败）。要测这类代码就自启一个无头实例：`chrome.exe --headless=new --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=<临时目录> http://localhost:5173/`，用 Node 内置 `WebSocket` 连 CDP `Runtime.evaluate`（`awaitPromise: true`），在页面里一次跑完"装钩子 → 驱动 UI → 逐帧采样 → 返回 JSON"。脚本放在 `node_modules/.scratch/`（`fake-llm.mjs` + `cdp-scroll-probe.mjs`），**`pnpm install` 会清掉**，重跑按本条描述重建。

@@ -2,7 +2,7 @@
 
 浏览器内 AI 应用生成平台：用户用自然语言描述需求，Agent 在内存虚拟文件系统里生成前端代码，右侧 iframe 实时预览，支持多轮迭代修改。
 
-当前处于 **最小 MVP** 阶段，设计依据见 [`docs/ai-app-gen-mvp/design-reference.md`](docs/ai-app-gen-mvp/design-reference.md)，实现方案见 [`docs/ai-app-gen-mvp/SDD.md`](docs/ai-app-gen-mvp/SDD.md)。
+当前处于 **最小 MVP** 阶段，设计依据见 [`docs/origin/ai-app-gen-mvp/design-reference.md`](docs/origin/ai-app-gen-mvp/design-reference.md)，实现方案见 [`docs/SDD/ai-app-gen-mvp/SDD.md`](docs/SDD/ai-app-gen-mvp/SDD.md)。
 
 ## MVP 范围
 
