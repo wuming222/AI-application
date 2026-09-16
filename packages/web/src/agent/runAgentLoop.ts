@@ -3,6 +3,7 @@ import { streamChat } from '../llm/router'
 import { registry } from './toolRegistry'
 import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { mergeToolCalls } from './toolProgress'
 import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
@@ -50,7 +51,7 @@ export async function runAgentLoop(
   for (let round = 1; round <= maxRounds; round++) {
     if (signal?.aborted) break
 
-    const step: AgentProgressStep = { round, thinkingText: '', status: 'thinking' }
+    const step: AgentProgressStep = { round, status: 'thinking' }
     steps.push(step)
     emitProgress()
 
@@ -70,28 +71,31 @@ export async function runAgentLoop(
         if (signal?.aborted) break
         roundText += chunk.delta
         accumulated += chunk.delta
-        step.thinkingText = accumulated
         if (chunk.reasoning) {
           step.reasoningText = (step.reasoningText ?? '') + chunk.reasoning
         }
         // Built-in tool status updates (e.g. web_search) during streaming
         if (chunk.built_in_tools && chunk.built_in_tools.length > 0) {
-          if (!step.toolCalls) {
-            step.status = 'tool-call'
-            step.toolCalls = chunk.built_in_tools.map((bt) => ({
+          step.status = 'tool-call'
+          step.toolCalls = mergeToolCalls(
+            step.toolCalls,
+            chunk.built_in_tools.map((bt) => ({
               name: bt.name,
-              args: {},
               status: bt.status === 'completed' ? ('done' as const) : ('running' as const),
-            }))
-          } else {
-            // Update existing built-in tool statuses
-            for (const bt of chunk.built_in_tools) {
-              const existing = step.toolCalls.find((tc) => tc.name === bt.name)
-              if (existing) {
-                existing.status = bt.status === 'completed' ? 'done' : 'running'
-              }
-            }
-          }
+            })),
+          )
+        }
+        // 模型刚开始吐函数调用：参数还要流很久，先把工具行亮起来，别等整条流结束
+        if (chunk.function_calls && chunk.function_calls.length > 0) {
+          step.status = 'tool-call'
+          step.toolCalls = mergeToolCalls(
+            step.toolCalls,
+            chunk.function_calls.map((fc) => ({
+              callId: fc.callId,
+              name: fc.name,
+              args: fc.args,
+            })),
+          )
         }
         if (chunk.tool_calls) {
           toolCalls = chunk.tool_calls
@@ -114,11 +118,14 @@ export async function runAgentLoop(
 
       // Execute tool calls
       step.status = 'tool-call'
-      step.toolCalls = toolCalls.map((tc) => ({
-        name: tc.function.name,
-        args: safeParseArgs(tc.function.arguments),
-        status: 'running' as const,
-      }))
+      step.toolCalls = mergeToolCalls(
+        step.toolCalls,
+        toolCalls.map((tc) => ({
+          callId: tc.id,
+          name: tc.function.name,
+          args: safeParseArgs(tc.function.arguments),
+        })),
+      )
       emitProgress()
 
       // Append assistant message with tool_calls
@@ -130,16 +137,17 @@ export async function runAgentLoop(
       })
 
       // Execute each tool and append results
-      for (let i = 0; i < toolCalls.length; i++) {
-        const tc = toolCalls[i]
+      for (const tc of toolCalls) {
         const args = safeParseArgs(tc.function.arguments)
         const result = await registry.execute(tc.function.name, args, toolCtx)
 
         allMessages.push({ role: 'tool', tool_call_id: tc.id, content: result })
 
-        if (step.toolCalls) {
-          step.toolCalls[i].status = 'done'
-          step.toolCalls[i].result = result
+        // 只有真正执行完才转 done：流的参数吐完不代表文件已写入
+        const row = step.toolCalls?.find((t) => t.callId === tc.id)
+        if (row) {
+          row.status = 'done'
+          row.result = result
         }
         emitProgress()
       }

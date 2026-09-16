@@ -17,6 +17,8 @@ export interface AgentProgress {
 }
 
 export interface AgentToolCallInfo {
+  // 对齐键：同名工具在一轮里被调用两次时，只有 callId 能分清是哪一行
+  callId?: string
   name: string
   args: Record<string, unknown>
   status: 'running' | 'done' | 'error'
@@ -25,7 +27,6 @@ export interface AgentToolCallInfo {
 
 export interface AgentProgressStep {
   round: number
-  thinkingText: string
   reasoningText?: string
   status: 'thinking' | 'tool-call' | 'done'
   toolCalls?: AgentToolCallInfo[]
