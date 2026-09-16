@@ -83,9 +83,23 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - 有 personal 系列 skill 可用：`personal-plan` → `personal-develop` → `personal-check` → `personal-review`，或用 `personal-workflow` 总控批量跑完当日需求。
 - `.claude/personal-workflow.json` 是本地流程状态文件，已 gitignore，不要提交。
 
+## 状态不变量（改状态前先读）
+
+界面是**多会话**的，所以任何与对话相关的状态都必须回答一句话：**它属于哪条会话**。下面的规则是踩出来的，不是风格偏好。
+
+- **聊天状态按会话分片**：`chatStore.bySession[sessionId] = { messages, progress, isStreaming }`。不允许全局单槽的会话状态 —— 单槽会让后台那一路把旧会话的消息/进度画到用户当前看的会话上。
+- **视图只读当前会话那一片**：`MessageList` / `ChatInterface` 都用 `currentSessionId` 去取分片；空态的条件是"该会话无消息**且**该会话没在生成"。
+- **循环写入必须定向**：`runAgentLoop` 的 `onProgress` 和收尾 `set` 只能写回发起时捕获的 `sessionId`；用自增的代际标记（`streamSeq`）挡住被顶替/已中止那一路的迟到写入，结果作废就不写库。
+- **工具与工作区读写显式带 sessionId**：`workspaceStore` 的所有方法首参都是 `sessionId`，`toolRegistry` 通过 `ToolContext` 拿。任何"隐式读 `currentSessionId`"的写法，都会让后台生成把文件写进用户当前打开的另一条会话。
+- **落库时机**：整轮跑完才 `saveMessages` / `saveWorkspace`；中断即丢，避免半截 assistant 与悬空 tool 结果。`saveWorkspace` 是**全量覆盖**（`PUT /sessions/:id/workspace` 用 `ON CONFLICT DO UPDATE`），所以目标会话写错就是抹掉别人的代码 —— 宁可不写。
+- **同时只一路**：`streamSessionId` 全局唯一；在别的会话发送时先 `abortStream()` 那一路并 `antdMessage.info` 明确提示，被中断那一路的分片回到本轮开始前。
+- **删除会话**：若删的正是生成中的那条，先中止再落库/清分片。
+
+改这类代码前必答的两个问题：**这段状态属于哪条会话？生成进行到一半时切换会话会怎样？** 两者都要在 `docs/{key}/SDD.md` 的验收标准里落成可勾的跨会话用例。
+
 ## 已知坑
 
-1. **`pnpm build` 目前是红的**：`tsc -b` 有 4 个历史遗留类型错误（`agent/runAgentLoop.ts` 两处未使用类型导入、`agent/toolRegistry.ts:101`、`store/workspaceStore.ts:51`），均非近期特性引入。**验证用 `pnpm --filter web test:run`，不要用 build 结果当绿灯。**
+1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 934 kB / gzip 304 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（32 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
 4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/preview-error-capture/SDD.md`）。

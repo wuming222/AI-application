@@ -3,6 +3,7 @@ import { Input, Button, message as antdMessage } from 'antd'
 import { PaperClipOutlined, SendOutlined } from '@ant-design/icons'
 import './ChatInterface.css'
 import { useChatStore } from '../store/chatStore'
+import { useSessionStore } from '../store/sessionStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 
@@ -11,7 +12,14 @@ const { TextArea } = Input
 export function ChatInterface() {
   const [input, setInput] = useState('')
   const [pendingImages, setPendingImages] = useState<string[]>([])
-  const { isStreaming, sendMessage, abort, composerFocusTick } = useChatStore()
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  // 只有"这条会话自己在生成"才锁输入；别的路在跑不影响这里发送
+  const isStreaming = useChatStore((s) =>
+    currentSessionId ? !!s.bySession[currentSessionId]?.isStreaming : false,
+  )
+  const sendMessage = useChatStore((s) => s.sendMessage)
+  const abortStream = useChatStore((s) => s.abortStream)
+  const composerFocusTick = useChatStore((s) => s.composerFocusTick)
   const inputRef = useRef<any>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { state: voiceState, transcript, start: startVoice, stop: stopVoice } = useVoiceInput()
@@ -133,7 +141,7 @@ export function ChatInterface() {
                 type="primary"
                 danger
                 className="send-btn"
-                onClick={abort}
+                onClick={abortStream}
               >
                 停止
               </Button>

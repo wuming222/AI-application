@@ -1,10 +1,11 @@
 import type { ToolDefinition } from '../llm/types'
+import type { ToolContext } from './types'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
 const READ_FILE_MAX_CHARS = 8000
 
 export interface ToolExecutor {
-  execute(args: Record<string, unknown>): Promise<string> | string
+  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<string> | string
 }
 
 interface RegisteredTool {
@@ -23,13 +24,13 @@ class ToolRegistry {
     return Array.from(this.tools.values()).map((t) => t.definition)
   }
 
-  async execute(name: string, args: Record<string, unknown>): Promise<string> {
+  async execute(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
     const tool = this.tools.get(name)
     if (!tool) {
       return `错误: 未知工具 ${name}`
     }
     try {
-      return await tool.executor.execute(args)
+      return await tool.executor.execute(args, ctx)
     } catch (err) {
       return `错误: 工具执行失败 - ${(err as Error).message}`
     }
@@ -57,7 +58,8 @@ registry.register(
     },
   },
   {
-    execute: (args) => useWorkspaceStore.getState().writeFile(args.path as string, args.content as string),
+    execute: (args, ctx) =>
+      useWorkspaceStore.getState().writeFile(ctx.sessionId, args.path as string, args.content as string),
   },
 )
 
@@ -74,9 +76,9 @@ registry.register(
     },
   },
   {
-    execute: (args) => {
+    execute: (args, ctx) => {
       // 单条工具结果过大可直接触发硬截断，从源头控制大小（设计文档 12.1）
-      const content = useWorkspaceStore.getState().readFile(args.path as string)
+      const content = useWorkspaceStore.getState().readFile(ctx.sessionId, args.path as string)
       if (content.length > READ_FILE_MAX_CHARS) {
         return (
           content.slice(0, READ_FILE_MAX_CHARS) +
@@ -98,7 +100,7 @@ registry.register(
     },
   },
   {
-    execute: () => useWorkspaceStore.getState().listFiles(),
+    execute: (_args, ctx) => useWorkspaceStore.getState().listFiles(ctx.sessionId),
   },
 )
 
@@ -115,7 +117,7 @@ registry.register(
     },
   },
   {
-    execute: (args) => useWorkspaceStore.getState().deleteFile(args.path as string),
+    execute: (args, ctx) => useWorkspaceStore.getState().deleteFile(ctx.sessionId, args.path as string),
   },
 )
 
@@ -135,9 +137,9 @@ registry.register(
     },
   },
   {
-    execute: (args) =>
+    execute: (args, ctx) =>
       useWorkspaceStore
         .getState()
-        .editFile(args.path as string, args.oldString as string, args.newString as string),
+        .editFile(ctx.sessionId, args.path as string, args.oldString as string, args.newString as string),
   },
 )

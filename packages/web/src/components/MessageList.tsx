@@ -4,8 +4,11 @@ import { Empty } from 'antd'
 import ReactMarkdown from 'react-markdown'
 import './MessageList.css'
 import { useChatStore } from '../store/chatStore'
+import { useSessionStore } from '../store/sessionStore'
 import { AgentProgress } from './AgentProgress'
 import type { Message, ToolCall } from '../llm/types'
+
+const NO_MESSAGES: Message[] = []
 
 function toggleIntoView(e: SyntheticEvent<HTMLDetailsElement>) {
   if (e.currentTarget.open) {
@@ -102,9 +105,11 @@ function ToolGroupBubble({ msgs, toolResults }: { msgs: Message[]; toolResults: 
 }
 
 export function MessageList() {
-  const messages = useChatStore((s) => s.messages)
-  const isStreaming = useChatStore((s) => s.isStreaming)
-  const progress = useChatStore((s) => s.progress)
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const slice = useChatStore((s) => (currentSessionId ? s.bySession[currentSessionId] : undefined))
+  const messages = slice?.messages ?? NO_MESSAGES
+  const isStreaming = slice?.isStreaming ?? false
+  const progress = slice?.progress ?? null
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -119,7 +124,7 @@ export function MessageList() {
 
   return (
     <div className="message-list">
-      {messages.length === 0 && (
+      {messages.length === 0 && !isStreaming && (
         <div className="message-list-empty">
           <Empty description="发送一条消息开始对话" />
         </div>
