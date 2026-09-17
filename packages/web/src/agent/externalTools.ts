@@ -16,8 +16,9 @@ import type { ToolResult } from './toolRegistry'
 const ENABLEMENT_KEY = 'mcp-servers-enabled'
 const BASE = import.meta.env.VITE_API_BASE_URL || ''
 
-// 服务端 call_tool 是 30s；这里宽一档，让服务端那句更可读的超时文案先回来
-const CALL_TIMEOUT_MS = 35_000
+// 服务端的三条上界：call_tool 30s、每个 server 的清单 20s（两个 server 并发，所以清单总和也是
+// 20s 而不是 40s，见 routes/mcp.py）。这里统一宽一档，让服务端那句更可读的超时文案先回来。
+const REQUEST_TIMEOUT_MS = 35_000
 
 let servers: McpServerInfo[] = []
 let readyPromise: Promise<void> | null = null
@@ -96,7 +97,7 @@ function makeExecutor(service: string, tool: string) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ service, tool, arguments: args }),
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
       if (!res.ok) {
         return { text: `外部工具调用失败：HTTP ${res.status}`, isError: true }
@@ -124,7 +125,7 @@ export function externalToolsReady(): Promise<void> {
 
 async function doLoad(): Promise<void> {
   try {
-    const res = await fetch(`${BASE}/api/mcp/tools`, { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) })
+    const res = await fetch(`${BASE}/api/mcp/tools`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = (await res.json()) as {
       servers?: { id?: unknown; label?: unknown; defaultEnabled?: unknown }[]

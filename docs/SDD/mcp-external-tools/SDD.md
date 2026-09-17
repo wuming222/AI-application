@@ -91,9 +91,12 @@ per-call 让 enter/exit 落在同一个协程里，结构上就没这个坑，�
 工具，量级上无所谓。`tools/list` 另有 TTL 缓存兜住延迟（步骤 3）。
 
 `call_tool` 内部：把 content 块拼成文本（`type=='text'` 取 `text`，非文本块记一句
-`[非文本内容: image]` 占位而不是丢弃，模型需要知道有东西没拿到），带 `structuredContent` 时
-优先 JSON 序列化 `content`（实测 amap 的 JSON 就装在 `content[].text` 里，原样回传即可）。
+`[非文本内容: image]` 占位而不是丢弃，模型需要知道有东西没拿到）；**只有**一个文本块都没拿到时才兜底
+序列化 `structuredContent`（实测 amap 的 JSON 就装在 `content[].text` 里，原样回传即可）。
 `isError` 直接透传。截断也在这里。
+
+> 评审后加固：`content` 不是 list、或元素不是对象时一律收窄跳过而不抛 —— `call_tool` 的
+> docstring 承诺"返回 `{text,is_error}`，不抛异常"，畸形回复不该靠路由那层 `except Exception` 兜。
 
 > **超时的实现方式（偏离原计划，理由记录）**：没用 `asyncio.timeout` —— `pyproject.toml` 声明支持
 > Python 3.10，且被取消的任务里 `finally` 还得再 `await` 一次收尾连接，容易变成"超时了但关不掉"。
@@ -110,9 +113,12 @@ per-call 让 enter/exit 落在同一个协程里，结构上就没这个坑，�
 - `GET /api/mcp/tools`（另接 `?refresh=true` 绕过缓存）→ `{ servers: [{id,label,defaultEnabled}], tools: [{ name, service, tool, description, parameters }], errors: [] }`
   - `name` 已加命名空间：`mcp__<service>__<tool>`（防与 5 个 fs 工具撞名，也让模型一眼看出这是外部能力）；
     同时保留裸 `tool` 字段，`/call` 要用它回指上游工具名。
-  - 进程内 TTL 缓存 10 分钟（`TOOLS_TTL_SECONDS`）；**逐个 server 容错**：某个 server 握手失败时它贡献 0 个工具
+  - 进程内 TTL 缓存 10 分钟（`TOOLS_TTL_SECONDS`）；**逐 server 容错**：某个 server 握手失败时它贡献 0 个工具
     并在响应里带 `errors: [{service, message}]`（message 截 300 字符），绝不让整个端点 500（否则 AntV 配额耗尽
     会连带 amap 一起不可用）。**有旧清单时先回落到旧清单** —— 上游抖一下不该让能力从界面上消失。
+  - 两个 server 的握手用 `asyncio.gather` **并发**（评审后改动）。原先的串行 `for` 循环里端点耗时是各
+    server 超时之和（`list_tools` 20s × 2 = 最坏 40s），会顶穿前端那份 35s 的 abort —— 表现不是超时文案，
+    而是"一个外部工具也没注册上"且每轮重演。并发后总和 = 最慢那一个（20s），清单顺序仍按 `MCP_SERVERS`。
 - `POST /api/mcp/call` body `{ service, tool, arguments }` → `{ text, is_error }`，**恒 200**（错误在 body 里，
   前端不需要区分 HTTP 异常与工具异常）。未知 service 也是 `is_error` 文本。
 - `main.py` 里 `app.include_router(mcp_router)`。CORS 白名单不动（5173 已在内）。
@@ -137,10 +143,10 @@ async executeDetailed(name, args, ctx): Promise<ToolResult>            // execut
 
 ```ts
 const ENABLEMENT_KEY = 'mcp-servers-enabled'   // module 私有，不外导（避免别处再开一个 key）
-const CALL_TIMEOUT_MS = 35_000
+const REQUEST_TIMEOUT_MS = 35_000              // 清单与调用两种请求共用，比服务端上界宽一档
 export function loadExternalTools(): Promise<void>      // 幂等：module-level readyPromise；失败时把 promise 置空，下一轮可重试
 export function externalToolsReady(): Promise<void>
-export function getExternalToolsSnapshot(): { servers, tools, loading, error }  // 引用稳定：无变化时同一对象
+export function getExternalToolsSnapshot(): { servers, enabled }  // 引用稳定：无变化时同一对象
 export function subscribeExternalTools(fn): () => void   // 返回取消订阅；面板靠它同时响应"加载完成"和"翻开关"
 export function isServerEnabled(id): boolean
 export function getEnabledServiceIds(): Set<string>      // localStorage 覆盖 defaultEnabled
@@ -231,23 +237,32 @@ const cls = tc.status === 'error' ? 'is-error' : tc.status === 'done' ? 'is-done
 
 1. **Python 客户端 + 路由**：`node_modules/.scratch/fake_mcp_server.py`（同一份逻辑两种挂载形态，
    `/mcp` 走 Streamable HTTP、`/sse` 走 SSE，可注入永不回复的 `slow`、`isError`、12,000 字符超长结果、
-   500 故障）+ `node_modules/.scratch/mcp_client_check.py` 驱动 → **21 项全过**：
+   500 故障）+ `node_modules/.scratch/mcp_client_check.py` 驱动 → **27 项全过**（评审后从 21 项扩来）：
    双传输各 5 个工具、截断后 `len=8021` 且尾带`\n（结果已截断，原内容 12000 字符）`、
    `isError` 透传、非文本块转 `[非文本内容: image]`、
    超时两个档位都实测：小预算 2.0s → 2.7s / 2.6s（`mcp_client_check.py`），生产预算 30.0s → **30.7s / 30.6s**
    （`mcp_timeout_30s.py`），两种传输各一次、都转成可恢复文本而不是抛出、
    单 server 故障时端点仍 200 且带 `errors[]`、TTL 缓存不打重复握手（`hits` 只有故障那个 =2）、响应不含 key。
+   评审后新增的 6 项：3 个 server 各 `sleep(1.5)` 的替身下端点 **1.51s** 而非 4.5s（并发）、
+   并发下清单顺序仍按 `MCP_SERVERS`、`content` 不是 list 与块不是 dict 时 `_flatten` 不抛、
+   上游用字符串 id 回复也能匹配且 id 不匹配时不误取。
 2. **真机路由冒烟（只消耗 MCP 配额，零模型 token）**：本树起 uvicorn 后
    `GET /api/mcp/tools` → 200，`amap-maps` 15 个 + `antv-visualization-chart` 25 个，
    `name` 全部 `mcp__<service>__<tool>`，`errors: []`，59,808 字符响应体里正则扫不到 `sk-*`；
    `POST /api/mcp/call` `maps_geo("杭州市西湖")` → `is_error:false`、
    `location":"120.130396,30.259242`、`citycode":"0571"`。
+   并发改动（[M1]）的真机计时用 `node_modules/.scratch/mcp_concurrency_real.py` 取：
+   solo `amap-maps` **1.09s** / solo `antv-visualization-chart` **1.34s** → 端点 **1.80s**，串行会是 **2.44s**。
+   这组数字是在**干净 worker** 上重取的 —— 第一轮取数时 `--reload` 只打了 `Reloading...` 却没起新进程
+   （见 AGENTS.md 已知坑 7），那份计时属于旧代码，已作废重跑。
 3. **浏览器端到端**：`node_modules/.scratch/fake-mcp-upstream.mjs`（一个进程同时顶掉
    `/api/llm/responses`（按 Responses 事件顺序下发 reasoning → `output_item.added(function_call)` →
    `function_call_arguments.delta` → `completed`）、`/api/sessions` CRUD、`/api/mcp/tools`、`/api/mcp/call`，
    外加 `/__probe/*` 把"实际发给模型的 tools 名"和"实际发生的 MCP 调用"回读出来）
    + `node_modules/.scratch/cdp-mcp-probe.mjs`（无头 Chrome + CDP，**页内 setInterval 采样器**逐帧记
-   `.tool-run` 的图标/class/颜色）→ **26 项全过**。
+   `.tool-run` 的图标/class/颜色）→ **26 项全过**；评审改的 `REQUEST_TIMEOUT_MS` 改名与
+   `runAgentLoop` 的 `clearTimeout` 都在这条链上（`runAgentLoop` 无单测覆盖，只能靠这一层），
+   改完**重跑仍 26/26、`页面告警: []`**。
 4. **端到端"模型真的自主调了 amap"**：**没跑**。它需要一次真实模型调用，按约定要他单独点头。
 
 ## 验收标准
@@ -272,3 +287,34 @@ const cls = tc.status === 'error' ? 'is-error' : tc.status === 'done' ? 'is-done
 
 - [ ] 端到端"模型真的自主选了 amap 的工具并调用成功"。这一步要一次真实模型调用（`qwen` + 真 MCP），
       零 token 的替代验证已经把协议、筛选、渲染、跨会话四件事分别钉住了，缺的只是"模型会不会想到用它"。
+
+## 评审（personal-review）
+
+基线 `main` @ merge-base `89e3a8e`，22 文件 +1447/−22（文档 320 行，代码 1127 行；未过 2000 行阈值，
+无跳过范围）。**BLOCKER 0 / CRITICAL 0 / MAJOR 2 / MINOR 6**，其中 5 条已改、3 条不改并记录理由。
+
+已改：
+
+| 级别 | 问题 | 位置 | 改法与证据 |
+|---|---|---|---|
+| MAJOR | 两个 server 串行握手，冷启动最坏 40s（20s × 2），顶穿前端 35s 的 abort → 表现成"一个外部工具也没注册"且每轮重演 | `routes/mcp.py` `list_external_tools` | 抽出 `_server_tools` 协程 + `asyncio.gather` 并发；假 server（3 个各 `sleep(1.5)`）实测 **1.51s** 而非 4.5s，真机 solo 1.09s / 1.34s → 端点 **1.80s**（串行 2.44s） |
+| MAJOR | `call_tool` docstring 承诺"不抛异常"，但 `_flatten` 在 `try` 之外，`content` 非 list / 块非 dict 时 `AttributeError` 逃出，靠路由兜底才没 500 | `mcp/client.py` `_flatten` | 两处形状收窄；单测式检查 `{"content":"不是列表"}` → `("(空结果)", False)`、畸形块混有效块 → 只留有效文本 |
+| MINOR | JSON-RPC 允许字符串 id，`payload.get("id") == want_id` 严格比较会把上游回的 `"1"` 判成含糊的"无回复" | `client.py` `_pick_rpc` | 两侧 `str()` 归一；加"字符串 id 能匹配 / id 不匹配不误取"两项检查 |
+| MINOR | 清单先到时 `Promise.race` 里那个 2s 兜底定时器不被清理，挂着待触发句柄 | `runAgentLoop.ts` | 存 `waitTimer` 并在 `finally` `clearTimeout`；`runAgentLoop` **无单测覆盖**，改完靠浏览器层重跑 26/26 兜住 |
+| MINOR | `CALL_TIMEOUT_MS` 同时管清单与调用两种请求，名字与注释只解释了前者 | `externalTools.ts` | 更名 `REQUEST_TIMEOUT_MS`，注释写清两条服务端上界（`call_tool` 30s、逐 server 清单 20s 且并发） |
+
+不改（记录）：
+
+- **`/api/mcp/call` 不做 tool 名白名单**：`{service, tool}` 原样透传，前端开关只筛 definitions 不构成服务端约束。
+  当前两个 server 全为只读工具、CORS 只放开 5173~5178，风险有限；"开关是不是硬边界"这件事留给带用户自定义
+  server 的版本一起解，否则现在加的代码没法覆盖后面必然要加的动态 server。
+- **`trust_env=False` 写死**：为绕开本机系统代理 MITM TLS（已实测），换到必须走企业代理出网的机器会连不上，
+  且只在 console 留一行 warn。等真出现第二台这样的机器再配置化。
+- **`✗` 现在也覆盖内置工具失败**（未知工具名、执行器抛异常此前一律 `✓`）：这是修正不是回归，但会改变截图基线。
+
+重跑（评审后）：Python 驱动 **27/27**、vitest **78/78（12 文件）**、`pnpm build` 绿（953 kB / gzip 309 kB）、
+lint 0 error（1 条既有警告）、无头 Chrome **26/26 且 `页面告警: []`**、真机 `tools?refresh=true` 1.89s /
+`maps_geo` `is_error:false`。
+
+一条流程教训写进了 `AGENTS.md` 已知坑 7：`uvicorn --reload` 在 Windows 上会打 `Reloading...` 之后不再起新
+worker，此时端点跑的还是旧代码 —— 上面第一轮真机计时就是这么取废的。

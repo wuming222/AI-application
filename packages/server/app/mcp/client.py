@@ -71,12 +71,16 @@ async def _sse_events(
 
 
 def _pick_rpc(body_text: str, want_id: int) -> dict | None:
-    """响应可能是 JSON，也可能是 Streamable HTTP 的 SSE 帧。取 id 匹配的那条。"""
+    """响应可能是 JSON，也可能是 Streamable HTTP 的 SSE 帧。取 id 匹配的那条。
+
+    id 两侧都按字符串比：JSON-RPC 允许上游用字符串 id 回我们发的数字 id，严格 `==` 会把它判成
+    "无回复"，而那句报错含糊得多（看不出是协议对不上还是上游真的没回）。
+    """
     try:
         payload = json.loads(body_text)
     except json.JSONDecodeError:
         return None
-    if isinstance(payload, dict) and payload.get("id") == want_id:
+    if isinstance(payload, dict) and str(payload.get("id")) == str(want_id):
         return payload
     return None
 
@@ -310,8 +314,14 @@ async def call_tool(cfg: MCPServerConfig, tool: str, arguments: dict, timeout: f
 
 
 def _flatten(result: dict) -> tuple[str, bool]:
+    """把 content 拍成一段文本。**不因上游形状异常而抛** —— 调用方（call_tool / 路由）承诺过
+    只回可恢复文本，这里再收窄一次，否则 `content: "字符串"` 这类畸形回复会变成 500。
+    """
     parts: list[str] = []
-    for block in result.get("content") or []:
+    content = result.get("content")
+    for block in content if isinstance(content, list) else []:
+        if not isinstance(block, dict):
+            continue
         if block.get("type") == "text":
             parts.append(block.get("text") or "")
         else:

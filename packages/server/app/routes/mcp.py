@@ -5,6 +5,7 @@
 API key 只出现在服务端到百炼的请求头里，绝不出现在响应中。
 """
 
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -12,7 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.mcp import client
-from app.mcp.servers import MCP_SERVERS, find_server, tool_prefix
+from app.mcp.servers import MCP_SERVERS, MCPServerConfig, find_server, tool_prefix
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
@@ -27,39 +28,48 @@ class ToolCallRequest(BaseModel):
     arguments: Optional[dict[str, Any]] = None
 
 
+async def _server_tools(
+    cfg: MCPServerConfig, refresh: bool
+) -> tuple[list[dict[str, Any]], Optional[dict[str, str]]]:
+    """一个 server 的清单 + 它的失败信息（失败不抛，返回旧缓存或空清单）。"""
+    cached = _tools_cache.get(cfg.id)
+    if not refresh and cached and (time.monotonic() - cached[0]) < TOOLS_TTL_SECONDS:
+        return cached[1], None
+    try:
+        listed = await client.list_tools(cfg)
+    except Exception as err:  # noqa: BLE001 - 单个 server 挂掉不能带走整个端点
+        # 有旧清单就用旧的，别因为上游抖动让能力消失
+        return (cached[1] if cached else []), {"service": cfg.id, "message": str(err)[:300]}
+    normalized = [
+        {
+            "name": f"{tool_prefix(cfg.id)}{t['name']}",
+            "service": cfg.id,
+            "tool": t["name"],
+            "description": t["description"],
+            "parameters": t["inputSchema"],
+        }
+        for t in listed
+    ]
+    _tools_cache[cfg.id] = (time.monotonic(), normalized)
+    return normalized, None
+
+
 @router.get("/tools")
 async def list_external_tools(refresh: bool = False):
     servers = [
         {"id": cfg.id, "label": cfg.label, "defaultEnabled": cfg.default_enabled}
         for cfg in MCP_SERVERS
     ]
+    # 并发握手：串行时冷启动耗时是各 server 超时之和（两个 server 最坏 40s），
+    # 会被前端那份 35s 的 abort 先掐断 —— 表现就不是超时文案而是"一个外部工具也没有"。
+    # gather 按入参顺序返回，所以清单顺序仍跟 MCP_SERVERS 一致。
+    results = await asyncio.gather(*(_server_tools(cfg, refresh) for cfg in MCP_SERVERS))
     tools: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
-
-    for cfg in MCP_SERVERS:
-        cached = _tools_cache.get(cfg.id)
-        if not refresh and cached and (time.monotonic() - cached[0]) < TOOLS_TTL_SECONDS:
-            tools.extend(cached[1])
-            continue
-        try:
-            listed = await client.list_tools(cfg)
-        except Exception as err:  # noqa: BLE001 - 单个 server 挂掉不能带走整个端点
-            errors.append({"service": cfg.id, "message": str(err)[:300]})
-            if cached:
-                tools.extend(cached[1])  # 有旧清单就用旧的，别因为上游抖动让能力消失
-            continue
-        normalized = [
-            {
-                "name": f"{tool_prefix(cfg.id)}{t['name']}",
-                "service": cfg.id,
-                "tool": t["name"],
-                "description": t["description"],
-                "parameters": t["inputSchema"],
-            }
-            for t in listed
-        ]
-        _tools_cache[cfg.id] = (time.monotonic(), normalized)
-        tools.extend(normalized)
+    for listed, err in results:
+        tools.extend(listed)
+        if err:
+            errors.append(err)
 
     return {"servers": servers, "tools": tools, "errors": errors}
 

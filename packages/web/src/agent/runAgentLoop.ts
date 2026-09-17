@@ -49,10 +49,13 @@ export async function runAgentLoop(
       : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages]
   // 外部工具清单是异步来的（App 挂载时就发起）。这里最多等 2s：等不到就当本轮没有外部工具。
   // 关键是把 definitions 定在循环开始处一次，不在 20 个 round 之间重算。
+  let waitTimer: ReturnType<typeof setTimeout> | undefined
   await Promise.race([
     externalToolsReady(),
-    new Promise((resolve) => setTimeout(resolve, EXTERNAL_TOOLS_WAIT_MS)),
-  ])
+    new Promise((resolve) => {
+      waitTimer = setTimeout(resolve, EXTERNAL_TOOLS_WAIT_MS)
+    }),
+  ]).finally(() => clearTimeout(waitTimer))
   const toolDefs = registry.getDefinitionsFor(getEnabledServiceIds())
   const limits = resolveLimits()
 
