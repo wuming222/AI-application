@@ -41,10 +41,18 @@ export function AgentProgress({ progress }: AgentProgressProps) {
               <span>第 {step.round} 轮执行工具:</span>
               {step.toolCalls.map((tc, j) => {
                 const isBuiltIn = tc.name === 'web_search'
-                const icon = isBuiltIn ? '🔍' : tc.status === 'running' ? '⏳' : '✓'
+                const icon = isBuiltIn
+                  ? '🔍'
+                  : tc.status === 'running'
+                    ? '⏳'
+                    : tc.status === 'error'
+                      ? '✗'
+                      : '✓'
+                const stateClass =
+                  tc.status === 'error' ? 'is-error' : tc.status === 'done' ? 'is-done' : 'is-running'
                 const path = typeof tc.args.path === 'string' ? tc.args.path : ''
                 return (
-                  <div key={j} className={`tool-run ${tc.status === 'done' ? 'is-done' : 'is-running'}`}>
+                  <div key={j} className={`tool-run ${stateClass}`}>
                     <span className="tool-run-icon">{icon}</span>
                     {tc.name}
                     {!isBuiltIn && path && ` (${path})`}

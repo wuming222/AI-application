@@ -111,6 +111,11 @@
   color: var(--app-warning);
 }
 
+/* 外部工具的上游失败（额度耗尽等）HTTP 仍是 200，只有这一态能把"其实没成功"画出来 */
+.tool-run.is-error {
+  color: var(--app-error);
+}
+
 .tool-run-icon {
   font-size: var(--font-md);
   margin-right: var(--space-1);

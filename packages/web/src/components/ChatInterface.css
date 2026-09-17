@@ -83,6 +83,19 @@
   opacity: 0.3;
 }
 
+/* 左侧工具组：导入图片 + 外部工具开关 */
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 与 .attach-btn 同形态，只是不承载文件输入 */
+.mcp-btn {
+  font-size: var(--font-xl);
+  opacity: 0.6;
+}
+
 .voice-btn {
   font-size: var(--font-xl);
 }

@@ -17,7 +17,7 @@
 | `pnpm install` | 安装依赖 |
 | `pnpm dev` | 前端 Vite dev server（默认 5173） |
 | `pnpm dev:server` | 后端 `uvicorn app.main:app --reload --port 8000` |
-| `pnpm --filter web test:run` | 前端单测（vitest，当前 52 用例） |
+| `pnpm --filter web test:run` | 前端单测（vitest，当前 78 用例） |
 | `pnpm --filter web lint` | oxlint |
 | `pnpm build` | `tsc -b && vite build` — 通过；只剩主 chunk 体积提示，见「已知坑」 |
 
@@ -28,7 +28,8 @@ Python 依赖：`packages/server/pyproject.toml`（fastapi / uvicorn / httpx / p
 ```
 packages/web/src/
   agent/runAgentLoop.ts    Agent 主循环（多轮 tool call、进度流）
-  agent/toolRegistry.ts    虚拟文件系统工具：write_file / read_file / list_files / delete_file / edit_file
+  agent/toolRegistry.ts    虚拟文件系统工具：write_file / read_file / list_files / delete_file / edit_file；外加外部工具的注册与按 server 筛选
+  agent/externalTools.ts   拉取 MCP 工具清单并注册进 registry，持有逐 server 全局开关（localStorage `mcp-servers-enabled`）
   agent/contextBudget.ts   上下文截断（先语义压缩、再硬截断，保证 tool 配对）
   llm/router.ts            按 VITE_LLM_PROVIDER 选 provider
   llm/providers/responses.ts  OpenAI Responses 流式协议 + 内置 web_search 工具事件
@@ -39,10 +40,13 @@ packages/web/src/
   App.tsx useThemeVars()   主题派生颜色桥成 --app-*，与 tokens.css 两层分开
   hooks/useVoiceInput.ts   麦克风采集 + PCM 编码，连后端 WS
 packages/server/app/
-  main.py                  FastAPI 入口，import 时 init_db()，注册三个 router
+  main.py                  FastAPI 入口，import 时 init_db()，注册四个 router
   routes/llm.py            /api/llm/{chat/completions,responses,title}，转发上游并注入 key
   routes/sessions.py       /api/sessions CRUD + /messages + /workspace
+  routes/mcp.py            /api/mcp/tools（TTL 缓存 + 逐 server 容错）与 /api/mcp/call（恒 200，错误在 body）
   routes/voice.py          /api/voice/ws → DashScope 实时 ASR
+  mcp/client.py            手搓的最小 MCP 客户端（Streamable HTTP + SSE 双传输，trust_env=False，每次调用一条会话）
+  mcp/servers.py           已接入 server 的写死配置与 DashScope 鉴权头（key 只在服务端）
   database.py              SQLite（WAL + 外键），CREATE TABLE IF NOT EXISTS + 轻量 ALTER 迁移
 ```
 
@@ -50,7 +54,7 @@ packages/server/app/
 
 LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_URL`：
 
-- **为空** → `/api/llm/*` 命中 `vite.config.ts` 的 proxy，直连 `LLM_BASE_URL` 并在 dev server 侧注入 `Authorization`。此路径只在开发环境成立，且 `/api/sessions` 会 404。
+- **为空** → `/api/llm/*` 命中 `vite.config.ts` 的 proxy，直连 `LLM_BASE_URL` 并在 dev server 侧注入 `Authorization`。此路径只在开发环境成立，且 `/api/sessions` 会 404。`/api/mcp/*` 同样不在 proxy 白名单里，但失败形态不同：vite 把它当前端路由回成 SPA 外壳（200 text/html），`res.json()` 抛异常 → 一个外部工具都不注册，界面静默退化成"没有 MCP"，不报网络错误。
 - **非空**（如 `http://localhost:8000`）→ 会话、LLM、语音全部走 FastAPI，key 由服务端注入。**这是当前使用的模式。**
 
 因此：改了 uvicorn 端口，必须同步改 `VITE_API_BASE_URL`，否则前端报网络错误。`main.py` 的 CORS 白名单只放开 `localhost:5173~5178`，换端口要一起加。
@@ -97,18 +101,19 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 - **工具与工作区读写显式带 sessionId**：`workspaceStore` 的所有方法首参都是 `sessionId`，`toolRegistry` 通过 `ToolContext` 拿。任何"隐式读 `currentSessionId`"的写法，都会让后台生成把文件写进用户当前打开的另一条会话。
 - **落库时机**：整轮跑完才 `saveMessages` / `saveWorkspace`；中断即丢，避免半截 assistant 与悬空 tool 结果。`saveWorkspace` 是**全量覆盖**（`PUT /sessions/:id/workspace` 用 `ON CONFLICT DO UPDATE`），所以目标会话写错就是抹掉别人的代码 —— 宁可不写。
 - **同时只一路**：`streamSessionId` 全局唯一；在别的会话发送时先 `abortStream()` 那一路并 `antdMessage.info` 明确提示，被中断那一路的分片回到本轮开始前。
+- **外部工具是全局的，两件事例外于上面的分片纪律**：`registry` 仍是进程级单例、只 `register` 不 `unregister`；开关是**全局偏好**（localStorage 单 key `mcp-servers-enabled`），不进 `bySession`、不落库。且外部工具执行器**永不读写 `workspaceStore`**，结果只作为 `role:'tool'` 文本进上下文。理由：工具清单与开关不属于任何一条会话，做成会话状态反而会让后台那一路改到用户当前看的会话。代价是生成中途翻开关不影响在飞那轮（definitions 在每次 `runAgentLoop` 开始处只读一次）。新增"与对话有关"的全局状态前先问一句：它真的不属于任何会话吗？
 - **删除会话**：若删的正是生成中的那条，先中止再落库/清分片。
 
 改这类代码前必答的两个问题：**这段状态属于哪条会话？生成进行到一半时切换会话会怎样？** 两者都要在 `docs/SDD/{key}/SDD.md` 的验收标准里落成可勾的跨会话用例。
 
 ## 已知坑
 
-1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 936 kB / gzip 305 kB（antd + highlight.js），未做代码分割。**验证优先用 `pnpm --filter web test:run`（52 用例），build 绿不代表交互没问题。**
+1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 953 kB / gzip 309 kB（antd + highlight.js；MCP 开关面板之后），未做代码分割。**验证优先用 `pnpm --filter web test:run`（78 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
 4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/SDD/preview-error-capture/SDD.md`）。
-5. 单测覆盖 agent / llm / store / preview / utils 的纯逻辑（52 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。组件级行为（effect 清理、StrictMode 双跑）单测同样抓不到，见坑 6。
+5. 单测覆盖 agent / llm / store / preview / utils 的纯逻辑（78 用例）；**UI 交互没有自动化测试** —— 长按拖动、拖宽侧边栏与聊天列、代码视图高亮、预览保活这类改动改完要在浏览器实操验证。该仓库也没有视觉回归测试，用 `getComputedStyle` 打基线再复测是当前可行的比对手段。组件级行为（effect 清理、StrictMode 双跑）单测同样抓不到，见坑 6。
 6. **浏览器实测的时序**：一次生成的中间态只存在几秒，而 `evaluate_script` 单程往返就要几秒到几十秒，定点轮询必然错过窗口 —— 要在触发前先在页面里装采样器（`setInterval` 记录 DOM 状态变化到 `window.__log__`），跑完再取。另外这类链路可以离线验证：用一个假 SSE 后端（按 Responses 事件顺序下发，可控静默时长）替掉真实上游，把 `VITE_API_BASE_URL` 指过去，既不消耗模型调用又能复现协议时序。
-   - **内嵌 Browser 面板可能整段时间是 hidden**：`document.visibilityState === 'hidden'` 时 `requestAnimationFrame` **一帧都不发**，所以追滚、动画、任何 rAF 合帧的逻辑在面板里根本跑不出行为（`take_screenshot` 也会以 `NATIVE_BROWSER_VIEWPORT_UNAVAILABLE` 失败）。要测这类代码就自启一个无头实例：`chrome.exe --headless=new --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=<临时目录> http://localhost:5173/`，用 Node 内置 `WebSocket` 连 CDP `Runtime.evaluate`（`awaitPromise: true`），在页面里一次跑完"装钩子 → 驱动 UI → 逐帧采样 → 返回 JSON"。脚本放在 `node_modules/.scratch/`（`fake-llm.mjs` + `cdp-scroll-probe.mjs`），**`pnpm install` 会清掉**，重跑按本条描述重建。
+   - **内嵌 Browser 面板可能整段时间是 hidden**：`document.visibilityState === 'hidden'` 时 `requestAnimationFrame` **一帧都不发**，所以追滚、动画、任何 rAF 合帧的逻辑在面板里根本跑不出行为（`take_screenshot` 也会以 `NATIVE_BROWSER_VIEWPORT_UNAVAILABLE` 失败）。要测这类代码就自启一个无头实例：`chrome.exe --headless=new --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=<临时目录> http://localhost:5173/`，用 Node 内置 `WebSocket` 连 CDP `Runtime.evaluate`（`awaitPromise: true`），在页面里一次跑完"装钩子 → 驱动 UI → 逐帧采样 → 返回 JSON"。脚本放在 `node_modules/.scratch/`（`fake-llm.mjs` + `cdp-scroll-probe.mjs`；MCP 那批是 `fake-mcp-upstream.mjs` + `cdp-mcp-probe.mjs` + `fake_mcp_server.py` + `mcp_client_check.py` + `mcp_timeout_30s.py` + `mcp_real_smoke.py`），**`pnpm install` 会清掉**，重跑按本条描述重建。
    - 逐帧采样要同时记 `scrollHeight`/`clientHeight`：只看"脚本层写了几个值"证明不了观感，"离底部的滞后量 + 滞后帧占比"才是。
    - 换过一次组件源码再跑 A/B 时，`git show main:<file> > <file>` 可能被 vite 按 mtime 缓存成空模块，写完 `touch` 一下并 `curl` 该模块确认内容非空。
