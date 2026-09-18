@@ -4,9 +4,11 @@ import { registry } from './toolRegistry'
 import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { mergeToolCalls } from './toolProgress'
+import { externalToolsReady, getEnabledServiceIds } from './externalTools'
 import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
+const EXTERNAL_TOOLS_WAIT_MS = 2000
 
 const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想要什么应用，你帮他生成出来。
 
@@ -45,7 +47,16 @@ export async function runAgentLoop(
     messages[0]?.role === 'system'
       ? [...messages]
       : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages]
-  const toolDefs = registry.getDefinitions()
+  // 外部工具清单是异步来的（App 挂载时就发起）。这里最多等 2s：等不到就当本轮没有外部工具。
+  // 关键是把 definitions 定在循环开始处一次，不在 20 个 round 之间重算。
+  let waitTimer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    externalToolsReady(),
+    new Promise((resolve) => {
+      waitTimer = setTimeout(resolve, EXTERNAL_TOOLS_WAIT_MS)
+    }),
+  ]).finally(() => clearTimeout(waitTimer))
+  const toolDefs = registry.getDefinitionsFor(getEnabledServiceIds())
   const limits = resolveLimits()
 
   for (let round = 1; round <= maxRounds; round++) {
@@ -139,14 +150,16 @@ export async function runAgentLoop(
       // Execute each tool and append results
       for (const tc of toolCalls) {
         const args = safeParseArgs(tc.function.arguments)
-        const result = await registry.execute(tc.function.name, args, toolCtx)
+        const res = await registry.executeDetailed(tc.function.name, args, toolCtx)
+        const result = res.text
 
         allMessages.push({ role: 'tool', tool_call_id: tc.id, content: result })
 
-        // 只有真正执行完才转 done：流的参数吐完不代表文件已写入
+        // 只有真正执行完才转 done：流的参数吐完不代表文件已写入。
+        // isError 单独占一态：外部工具上游额度耗尽时 HTTP 仍 200，只有 JSON-RPC 层说得了真假。
         const row = step.toolCalls?.find((t) => t.callId === tc.id)
         if (row) {
-          row.status = 'done'
+          row.status = res.isError ? 'error' : 'done'
           row.result = result
         }
         emitProgress()

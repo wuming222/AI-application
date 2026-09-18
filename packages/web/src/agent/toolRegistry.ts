@@ -4,35 +4,63 @@ import { useWorkspaceStore } from '../store/workspaceStore'
 
 const READ_FILE_MAX_CHARS = 8000
 
+export interface ToolResult {
+  text: string
+  // 外部工具（MCP）的成败在 JSON-RPC 的 isError 上，HTTP 恒 200，所以要把这个位带到进度渲染层
+  isError?: boolean
+}
+
 export interface ToolExecutor {
-  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<string> | string
+  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | string> | ToolResult | string
 }
 
 interface RegisteredTool {
   definition: ToolDefinition
   executor: ToolExecutor
+  // 有 mcpService 即外部工具：受逐 server 开关约束；无即内置 fs 工具，恒在
+  meta?: { mcpService?: string }
 }
 
 class ToolRegistry {
   private tools = new Map<string, RegisteredTool>()
 
-  register(definition: ToolDefinition, executor: ToolExecutor): void {
-    this.tools.set(definition.name, { definition, executor })
+  register(definition: ToolDefinition, executor: ToolExecutor, meta?: RegisteredTool['meta']): void {
+    this.tools.set(definition.name, { definition, executor, meta })
   }
 
   getDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.values()).map((t) => t.definition)
   }
 
+  /**
+   * 按启用的外部 server 过滤**发给模型的 definitions 副本**。
+   * 注册表本身仍是进程级、一次性注册 —— 这里只筛不发，绝不 unregister，
+   * 否则就等于把"这一轮的筛选结果"写进全局单例，后台并行的另一路会被污染。
+   */
+  getDefinitionsFor(enabledMcpServices: Set<string>): ToolDefinition[] {
+    return Array.from(this.tools.values())
+      .filter((t) => !t.meta?.mcpService || enabledMcpServices.has(t.meta.mcpService))
+      .map((t) => t.definition)
+  }
+
   async execute(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+    return (await this.executeDetailed(name, args, ctx)).text
+  }
+
+  async executeDetailed(
+    name: string,
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<ToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
-      return `错误: 未知工具 ${name}`
+      return { text: `错误: 未知工具 ${name}`, isError: true }
     }
     try {
-      return await tool.executor.execute(args, ctx)
+      const result = await tool.executor.execute(args, ctx)
+      return typeof result === 'string' ? { text: result } : result
     } catch (err) {
-      return `错误: 工具执行失败 - ${(err as Error).message}`
+      return { text: `错误: 工具执行失败 - ${(err as Error).message}`, isError: true }
     }
   }
 

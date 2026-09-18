@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.llm import router as llm_router
+from app.routes.mcp import router as mcp_router
 from app.routes.sessions import router as sessions_router
 from app.routes.voice import router as voice_router
 from app.database import init_db
@@ -18,5 +19,6 @@ app.add_middleware(
 )
 
 app.include_router(llm_router)
+app.include_router(mcp_router)
 app.include_router(sessions_router)
 app.include_router(voice_router)

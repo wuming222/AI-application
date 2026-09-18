@@ -33,6 +33,22 @@ describe('mergeToolCalls', () => {
     expect(merged[0].status).toBe('done')
   })
 
+  it('外部工具失败：running 能转到 error', () => {
+    const running = mergeToolCalls(undefined, [{ callId: 'call_1', name: 'mcp__amap-maps__maps_geo' }])
+    const merged = mergeToolCalls(running, [
+      { callId: 'call_1', name: 'mcp__amap-maps__maps_geo', status: 'error' },
+    ])
+
+    expect(merged[0].status).toBe('error')
+  })
+
+  it('error 不会被后到的快照打回 running', () => {
+    const failed = [row({ name: 'mcp__amap-maps__maps_geo', callId: 'call_1', status: 'error' })]
+    const merged = mergeToolCalls(failed, [{ callId: 'call_1', name: 'mcp__amap-maps__maps_geo' }])
+
+    expect(merged[0].status).toBe('error')
+  })
+
   it('参数后到齐时补上，空参数不覆盖已有值', () => {
     const early = mergeToolCalls(undefined, [{ callId: 'call_1', name: 'write_file' }])
     const withPath = mergeToolCalls(early, [

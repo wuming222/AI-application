@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Input, Button, message as antdMessage } from 'antd'
-import { PaperClipOutlined, SendOutlined } from '@ant-design/icons'
+import { Input, Button, Popover, Tooltip, message as antdMessage } from 'antd'
+import { ApiOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons'
 import './ChatInterface.css'
 import { useChatStore } from '../store/chatStore'
 import { useSessionStore } from '../store/sessionStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
 import { useVoiceInput } from '../hooks/useVoiceInput'
+import { McpServersPanel } from './McpServersPanel'
 
 const { TextArea } = Input
 
@@ -110,7 +111,7 @@ export function ChatInterface() {
           className="composer-input"
         />
         <div className="composer-toolbar">
-          <div>
+          <div className="composer-tools">
             <input
               ref={fileRef}
               type="file"
@@ -126,6 +127,11 @@ export function ChatInterface() {
               onClick={() => fileRef.current?.click()}
               icon={<PaperClipOutlined />}
             />
+            <Popover trigger="click" placement="topLeft" content={<McpServersPanel />}>
+              <Tooltip title="外部工具">
+                <Button type="text" className="mcp-btn" icon={<ApiOutlined />} />
+              </Tooltip>
+            </Popover>
           </div>
           <div className="composer-actions">
             <Button
