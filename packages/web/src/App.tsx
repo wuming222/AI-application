@@ -5,7 +5,7 @@ import { MessageList } from './components/MessageList'
 import { PreviewArea } from './components/PreviewArea'
 import { Sidebar } from './components/Sidebar'
 import { useSessionStore } from './store/sessionStore'
-import { loadExternalTools } from './agent/externalTools'
+import { loadMcpCapabilities } from './agent/providers/mcp'
 import './App.css'
 
 /**
@@ -47,10 +47,10 @@ export default function App() {
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const headerTitle = currentSession?.title || 'AI App Generator'
 
-  // 外部工具清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
+  // MCP 清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
   // 它是全局偏好，不是会话状态，所以不进任何 store 分片。
   useEffect(() => {
-    loadExternalTools()
+    loadMcpCapabilities()
   }, [])
 
   const onMouseDown = useCallback(() => {

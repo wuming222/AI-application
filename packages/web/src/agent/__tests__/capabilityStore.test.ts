@@ -32,7 +32,12 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body }
 }
 
-/** 每个用例都要重新拿一份干净的模块状态（registry / snapshot 是模块级的）。 */
+/**
+ * 每个用例都要重新拿一份干净的模块状态（registry 与 capabilityStore 都是模块级的）。
+ *
+ * store 与 mcp provider 拆成两个模块后必须一起导入：resetModules 之后这两次 import 落在同一张新图上，
+ * 所以 provider 写的就是测试读的。分开拿会读到两份互不相干的 store，表现是"翻了开关快照没变"。
+ */
 async function loadWith(handler: (url: string) => Promise<unknown>) {
   vi.resetModules()
   localStorage.clear()
@@ -41,16 +46,17 @@ async function loadWith(handler: (url: string) => Promise<unknown>) {
     return jsonResponse(await handler(url))
   })
   vi.stubGlobal('fetch', fetchMock)
-  const mod = await import('../externalTools')
+  const mcp = await import('../providers/mcp')
+  const store = await import('../capabilityStore')
   const { registry } = await import('../toolRegistry')
-  return { mod, registry, fetchMock }
+  return { mcp, store, registry, fetchMock }
 }
 
 async function loadTools(payload: unknown = TOOLS_PAYLOAD) {
   const loaded = await loadWith((url) =>
     Promise.resolve(url.endsWith('/api/mcp/tools') ? payload : { text: '', is_error: false })
   )
-  await loaded.mod.loadExternalTools()
+  await loaded.mcp.loadMcpCapabilities()
   loaded.fetchMock.mockClear()
   return loaded
 }
@@ -83,18 +89,17 @@ describe('清单加载与注册', () => {
 
   it('清单接口挂掉时一个外部工具也不注册，行为退回无 MCP', async () => {
     const loaded = await loadWith(() => Promise.reject(new Error('Failed to fetch')))
-    await loaded.mod.loadExternalTools()
-    const { registry } = loaded
+    await loaded.mcp.loadMcpCapabilities()
 
-    expect(loaded.mod.getEnabledServiceIds().size).toBe(0)
-    expect(registry.getDefinitionsFor(new Set([AMAP])).map((d) => d.name)).not.toContain(
+    expect(loaded.store.getEnabledSourceIds().size).toBe(0)
+    expect(loaded.registry.getDefinitionsFor(new Set([AMAP])).map((d) => d.name)).not.toContain(
       `mcp__${AMAP}__maps_geo`
     )
   })
 
   it('默认开关下发给模型的清单里没有任何 AntV 工具，amap 的在', async () => {
-    const { mod, registry } = await loadTools()
-    const sent = registry.getDefinitionsFor(mod.getEnabledServiceIds()).map((d) => d.name)
+    const { store, registry } = await loadTools()
+    const sent = registry.getDefinitionsFor(store.getEnabledSourceIds()).map((d) => d.name)
 
     expect(sent.filter((n) => n.startsWith(`mcp__${ANTV}__`))).toEqual([])
     expect(sent).toContain(`mcp__${AMAP}__maps_geo`)
@@ -110,10 +115,10 @@ describe('清单加载与注册', () => {
         throw new SyntaxError('Unexpected token < in JSON at position 0')
       },
     })))
-    const mod = await import('../externalTools')
+    const mcp = await import('../providers/mcp')
     const { registry } = await import('../toolRegistry')
 
-    await expect(mod.loadExternalTools()).resolves.toBeUndefined()
+    await expect(mcp.loadMcpCapabilities()).resolves.toBeUndefined()
     expect(registry.getDefinitionsFor(new Set([AMAP])).map((d) => d.name)).not.toContain(
       `mcp__${AMAP}__maps_geo`
     )
@@ -125,74 +130,100 @@ describe('清单加载与注册', () => {
       attempt += 1
       return attempt === 1 ? Promise.reject(new Error('boom')) : Promise.resolve(TOOLS_PAYLOAD)
     })
-    await expect(loaded.mod.loadExternalTools()).resolves.toBeUndefined()
-    await loaded.mod.loadExternalTools()
+    await expect(loaded.mcp.loadMcpCapabilities()).resolves.toBeUndefined()
+    await loaded.mcp.loadMcpCapabilities()
 
-    expect(loaded.mod.isServerEnabled(AMAP)).toBe(true)
+    expect(loaded.store.isSourceEnabled(AMAP)).toBe(true)
   })
 
   it('快照引用只在数据变化时更换，满足 useSyncExternalStore', async () => {
-    const { mod } = await loadTools()
-    const first = mod.getExternalToolsSnapshot()
+    const { store } = await loadTools()
+    const first = store.getCapabilitySnapshot()
 
-    expect(mod.getExternalToolsSnapshot()).toBe(first)
-    mod.setServerEnabled(AMAP, false)
-    expect(mod.getExternalToolsSnapshot()).not.toBe(first)
+    expect(store.getCapabilitySnapshot()).toBe(first)
+    store.setSourceEnabled(AMAP, false)
+    expect(store.getCapabilitySnapshot()).not.toBe(first)
   })
 })
 
-describe('逐 server 开关', () => {
+describe('逐 source 开关', () => {
   it('defaultEnabled 决定初值，AntV 默认关', async () => {
-    const { mod } = await loadTools()
-    const enabled = mod.getEnabledServiceIds()
+    const { store } = await loadTools()
+    const enabled = store.getEnabledSourceIds()
 
     expect(enabled.has(AMAP)).toBe(true)
     expect(enabled.has(ANTV)).toBe(false)
   })
 
   it('翻开关写 localStorage 并通知订阅者', async () => {
-    const { mod } = await loadTools()
+    const { store } = await loadTools()
     const seen = vi.fn()
-    mod.subscribeExternalTools(seen)
+    store.subscribeCapabilities(seen)
 
-    mod.setServerEnabled(ANTV, true)
+    store.setSourceEnabled(ANTV, true)
 
-    expect(mod.isServerEnabled(ANTV)).toBe(true)
+    expect(store.isSourceEnabled(ANTV)).toBe(true)
     expect(seen).toHaveBeenCalled()
-    expect(JSON.parse(localStorage.getItem('mcp-servers-enabled') ?? '{}')).toEqual({ [ANTV]: true })
+    expect(JSON.parse(localStorage.getItem('capabilities-enabled') ?? '{}')).toEqual({ [ANTV]: true })
   })
 
   it('开关是全局偏好：翻完之后再取一份仍然是同一个值，与会话无关', async () => {
-    const { mod } = await loadTools()
+    const { store } = await loadTools()
 
-    mod.setServerEnabled(AMAP, false)
+    store.setSourceEnabled(AMAP, false)
 
-    expect(mod.isServerEnabled(AMAP)).toBe(false)
-    expect(JSON.parse(localStorage.getItem('mcp-servers-enabled') ?? '{}')).toEqual({ [AMAP]: false })
+    expect(store.isSourceEnabled(AMAP)).toBe(false)
+    expect(JSON.parse(localStorage.getItem('capabilities-enabled') ?? '{}')).toEqual({ [AMAP]: false })
   })
 
   it('刷新后读回上次偏好', async () => {
+    localStorage.setItem('capabilities-enabled', JSON.stringify({ [AMAP]: false, [ANTV]: true }))
+    vi.resetModules()
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(TOOLS_PAYLOAD)))
+    const mcp = await import('../providers/mcp')
+    const store = await import('../capabilityStore')
+    await mcp.loadMcpCapabilities()
+
+    expect(store.getEnabledSourceIds()).toEqual(new Set([ANTV]))
+  })
+
+  it('旧 key mcp-servers-enabled 的值迁到 capabilities-enabled，旧 key 删掉', async () => {
     localStorage.setItem('mcp-servers-enabled', JSON.stringify({ [AMAP]: false, [ANTV]: true }))
     vi.resetModules()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => jsonResponse(TOOLS_PAYLOAD))
-    )
-    const mod = await import('../externalTools')
-    await mod.loadExternalTools()
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(TOOLS_PAYLOAD)))
+    const mcp = await import('../providers/mcp')
+    const store = await import('../capabilityStore')
+    await mcp.loadMcpCapabilities()
 
-    expect(mod.getEnabledServiceIds()).toEqual(new Set([ANTV]))
+    expect(store.getEnabledSourceIds()).toEqual(new Set([ANTV]))
+    expect(localStorage.getItem('mcp-servers-enabled')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('capabilities-enabled') ?? '{}')).toEqual({
+      [AMAP]: false,
+      [ANTV]: true,
+    })
+  })
+
+  it('两个 key 都在时新 key 赢，迁移不把较新的偏好覆盖回去', async () => {
+    localStorage.setItem('mcp-servers-enabled', JSON.stringify({ [AMAP]: false }))
+    localStorage.setItem('capabilities-enabled', JSON.stringify({ [AMAP]: true }))
+    vi.resetModules()
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(TOOLS_PAYLOAD)))
+    const mcp = await import('../providers/mcp')
+    const store = await import('../capabilityStore')
+    await mcp.loadMcpCapabilities()
+
+    expect(store.isSourceEnabled(AMAP)).toBe(true)
   })
 
   it('localStorage 抛异常时退回服务端默认值，不中断生成', async () => {
-    const { mod } = await loadTools()
+    const { store } = await loadTools()
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError')
     })
 
-    expect(() => mod.setServerEnabled(AMAP, false)).not.toThrow()
-    expect(mod.isServerEnabled(AMAP)).toBe(true)
-    expect(mod.isServerEnabled(ANTV)).toBe(false)
+    expect(() => store.setSourceEnabled(AMAP, false)).not.toThrow()
+    expect(store.isSourceEnabled(AMAP)).toBe(true)
+    expect(store.isSourceEnabled(ANTV)).toBe(false)
   })
 })
 
@@ -215,8 +246,8 @@ describe('执行器', () => {
   })
 
   it('服务被关掉时不调网络，回一句能让模型改口的 isError', async () => {
-    const { mod, registry, fetchMock } = await loadTools()
-    mod.setServerEnabled(AMAP, false)
+    const { store, registry, fetchMock } = await loadTools()
+    store.setSourceEnabled(AMAP, false)
 
     const res = await registry.executeDetailed(`mcp__${AMAP}__maps_geo`, { address: '西湖' }, ctx)
 

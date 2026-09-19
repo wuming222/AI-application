@@ -1,14 +1,25 @@
-/* 外部工具开关面板（Popover 内容）。尺度取 tokens.css，颜色取 --app-*。
+/* 能力开关面板（Popover 内容）：MCP 与技能各占一组。尺度取 tokens.css，颜色取 --app-*。
    只保留固有尺寸：面板 min-width 180px（一行"标签 + 小开关"的下限，与 Sidebar 的列表宽同类） */
 
-.mcp-panel {
+.capability-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
   min-width: 180px;
 }
 
-.mcp-panel-row {
+.capability-panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.capability-panel-title {
+  font-size: var(--font-xs);
+  color: var(--app-text-tertiary);
+}
+
+.capability-panel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -17,7 +28,7 @@
   color: var(--app-text-secondary);
 }
 
-.mcp-panel-empty {
+.capability-panel-empty {
   font-size: var(--font-sm);
   color: var(--app-text-tertiary);
 }

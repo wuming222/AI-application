@@ -4,11 +4,14 @@ import { registry } from './toolRegistry'
 import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { mergeToolCalls } from './toolProgress'
-import { externalToolsReady, getEnabledServiceIds } from './externalTools'
+import { mcpCapabilitiesReady } from './providers/mcp'
+import { getEnabledSourceIds } from './capabilityStore'
 import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
-const EXTERNAL_TOOLS_WAIT_MS = 2000
+// 只有 MCP 需要等：它的清单要等服务端逐 server 握手回来才有。skill 侧的工具定义是静态注册的、
+// 不等任何清单，把 skill 拉进这场 race 只会白白拖慢每轮的第一次请求。
+const MCP_HANDSHAKE_WAIT_MS = 2000
 
 const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想要什么应用，你帮他生成出来。
 
@@ -47,16 +50,16 @@ export async function runAgentLoop(
     messages[0]?.role === 'system'
       ? [...messages]
       : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages]
-  // 外部工具清单是异步来的（App 挂载时就发起）。这里最多等 2s：等不到就当本轮没有外部工具。
+  // MCP 清单是异步来的（App 挂载时就发起，服务端要逐 server 握手）。这里最多等 2s：等不到就当本轮没有 MCP 工具。
   // 关键是把 definitions 定在循环开始处一次，不在 20 个 round 之间重算。
   let waitTimer: ReturnType<typeof setTimeout> | undefined
   await Promise.race([
-    externalToolsReady(),
+    mcpCapabilitiesReady(),
     new Promise((resolve) => {
-      waitTimer = setTimeout(resolve, EXTERNAL_TOOLS_WAIT_MS)
+      waitTimer = setTimeout(resolve, MCP_HANDSHAKE_WAIT_MS)
     }),
   ]).finally(() => clearTimeout(waitTimer))
-  const toolDefs = registry.getDefinitionsFor(getEnabledServiceIds())
+  const toolDefs = registry.getDefinitionsFor(getEnabledSourceIds())
   const limits = resolveLimits()
 
   for (let round = 1; round <= maxRounds; round++) {
