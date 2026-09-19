@@ -4,8 +4,10 @@
 `is_error` / `errors` 里。前端因此不需要分两条错误路径 —— 这点在"上游 200 但业务失败"和
 "网关 502"混着来的场合值回票价。
 
-上游（AgentExplorer 与 raw.githubusercontent）都是匿名接口，本模块没有任何 key 可泄；
-但 `/file` 的 `path` 由请求方给，是本特性唯一的注入面，校验全部在发出外部请求之前完成。
+上游两家：内置技能在 `app/skills/local_skills/` 里随仓库分发（不鉴权、不发外部请求），百炼 Managed
+Agents 的技能接口要 Bearer —— key 只在 `app/skills/sources.py` 里，不进任何响应；`file_url` 那段 OSS
+预签名地址取的时候刻意不带鉴权头。两个注入面都由请求方给，校验都在任何读取/外部请求之前完成：
+`path` 只放行该技能 `references/` 下的 `.md`，`name` 在拼成目录路径前先过 `local.validate_skill_name`。
 """
 
 from fastapi import APIRouter, Query
@@ -17,7 +19,7 @@ router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 @router.get("/catalog")
 async def get_catalog(refresh: bool = False):
-    """全量目录（逐个类目翻页取全 + 去重 + 条数守卫）。前端用它渲染技能列表与常驻索引。"""
+    """全量目录（内置 + 百炼合成，同名时内置优先）。前端用它渲染技能列表与常驻索引。"""
     return await catalog.get_catalog(refresh)
 
 
@@ -27,7 +29,7 @@ async def search_skills(
     maxResults: int = Query(20, ge=1, le=100),
 ):
     if not keyword.strip():
-        return {"skills": [], "errors": [{"source": "agent-skills", "message": "keyword 不能为空"}]}
+        return {"skills": [], "errors": [{"source": catalog.SOURCE_LABEL, "message": "keyword 不能为空"}]}
     return await catalog.search(keyword.strip(), maxResults)
 
 

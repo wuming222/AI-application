@@ -1,179 +1,34 @@
-"""AgentExplorer 目录 / 正文 / references 的只读访问与进程内缓存。
+"""skill 目录 / 正文 / references 的对外门面：内置 + 百炼两家合成一份。
 
-三条与 `app/mcp/` 不同的取值，都写在 docs/origin/26-9-19.md 第 8 节：
-- 目录 TTL 6 小时（K7）。MCP 那份是 600s，因为工具清单会随 server 上线变化；目录几乎不变，
-  而全量目录要按 18 个类目逐个翻页，重拉的代价高得多。
-- **正文与 references 不缓存**。仓库更新后模型照旧版操作手册产出是真会失效的（云 API 参数命名）。
-- 目录条数的守卫是**两条独立断言**，不是"总数等于 297"：实测同一天重跑只得 269 条，因为
-  `playbooks` 类目返回了 HTTP 400。写死绝对值会让上游抖一次就把目录永久关死。
+契约与 `routes/mcp.py` 一致：HTTP 状态码不表达工具成败，成败在 body 里。
+
+两条与"合成"绑在一起的纪律，都别在改动时弄丢：
+
+1. **内置先取，且不受上游成败影响**。百炼列表失败只能让百炼那几家消失，不能把随仓库分发的
+   技能一起带走 —— 否则"外网抖动"会表现成"你一个技能都没有"。
+2. **名字是唯一身份**。同名时内置赢，被遮蔽的那条以 error 形式报出来，不静默丢弃；
+   目录、正文、引用三处解析必须走同一个 `_open` 判定，两处各判一次就会出现"目录里没有但它能取到"。
+
+与旧的 agentexplorer 通道相比，这里少了两样东西，理由都在各自文件里：跌幅守卫（百炼一次请求拿全量，
+半份目录这个失败模式没了来源）、正文不缓存（见 `bailian.py` 顶部三条事实）。
+
+取不到就显式回"未找到"，不允许让模型假装读过 —— 这条纪律跟通道无关。
 """
 
-import asyncio
-import time
-from typing import Any, Optional
+from typing import Any
 
-import httpx
+from app.skills import bailian, local, sources
 
-from app.skills import sources
-
-# 目录 TTL：6 小时（K7）
-CATALOG_TTL_SECONDS = 6 * 3600.0
-# 正文截断上界（K4：32,000 字符砍 8% 的份数、p50 完整保留；沿用 MCP 那个 8,000 会砍掉 93%）
+# 正文截断上界（K4：32,000 字符砍 8% 的份数、p50 完整保留）
 MAX_CONTENT_CHARS = 32000
 # references 单文件上界（K6：16,000 字符砍 6%）
 MAX_FILE_CHARS = 16000
-# 全量守卫：新结果不足上次成功结果的 90% 就判为没取全（是比例，不是绝对值）
-MIN_COUNT_RATIO = 0.9
-# 单类目最多翻多少页。上游 nextToken 正常个位数页，撞到这里就是它不停发。
-MAX_PAGES_PER_CATEGORY = 40
 
-_categories_cache: tuple[float, list[str]] | None = None
-_category_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-_last_good: tuple[float, list[dict[str, Any]]] | None = None
+SOURCE_LABEL = "skills"
 
 
-class SkillUpstreamError(Exception):
-    """上游不可用或返回不合形状。调用方一律转成 200 + body 里的错误，不往上抛。"""
-
-
-async def _get_json(client: httpx.AsyncClient, path: str, params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        resp = await client.get(f"{sources.AGENT_EXPLORER_BASE}{path}", params=params)
-    except Exception as err:  # noqa: BLE001 - httpx 的超时/连接异常种类多，统一收成一个可恢复错误
-        raise SkillUpstreamError(f"{type(err).__name__}: {err}") from err
-    if resp.status_code != 200:
-        raise SkillUpstreamError(f"HTTP {resp.status_code}")
-    try:
-        data = resp.json()
-    except Exception as err:  # noqa: BLE001 - 代理/网关回 HTML 时会走到这里
-        raise SkillUpstreamError(f"响应不是 JSON: {type(err).__name__}") from err
-    if not isinstance(data, dict):
-        raise SkillUpstreamError("响应不是对象")
-    return data
-
-
-def _normalize(row: dict[str, Any]) -> dict[str, Any]:
-    """只留前端要的字段。description 里含触发词，是常驻索引的全部内容，不要截它。"""
-    return {
-        "name": row.get("skillName"),
-        "displayName": row.get("displayName") or row.get("nameEn") or row.get("skillName"),
-        "description": row.get("description") or "",
-        "categoryCode": row.get("categoryCode"),
-        "subCategoryCode": row.get("subCategoryCode"),
-        "githubPath": row.get("githubPath") or "",
-        "updatedAt": row.get("updatedAt"),
-        "likeCount": row.get("likeCount"),
-    }
-
-
-async def _category_codes(client: httpx.AsyncClient) -> list[str]:
-    global _categories_cache
-    if _categories_cache and (time.monotonic() - _categories_cache[0]) < CATALOG_TTL_SECONDS:
-        return _categories_cache[1]
-    data = await _get_json(client, "/openapi/for-agent/categories", {})
-    codes = [c["code"] for c in data.get("data") or [] if isinstance(c, dict) and c.get("code")]
-    if not codes:
-        raise SkillUpstreamError("类目清单为空")
-    _categories_cache = (time.monotonic(), codes)
-    return codes
-
-
-async def _fetch_category(client: httpx.AsyncClient, code: str) -> list[dict[str, Any]]:
-    """一个类目翻页取全。任何一页失败就整体作废 —— 半份类目比整份缺失更坏：它看起来是成功的。"""
-    out: list[dict[str, Any]] = []
-    token: Optional[str] = None
-    for _ in range(MAX_PAGES_PER_CATEGORY):
-        params: dict[str, Any] = {"categoryCode": code, "maxResults": 100}
-        if token:
-            params["nextToken"] = token
-        page = await _get_json(client, "/openapi/for-agent/skills", params)
-        rows = page.get("data") or []
-        if not isinstance(rows, list):
-            raise SkillUpstreamError(f"{code} 的 data 不是数组")
-        out.extend(_normalize(r) for r in rows if isinstance(r, dict) and r.get("skillName"))
-        token = page.get("nextToken")
-        if not token:
-            return out
-    raise SkillUpstreamError(f"{code} 翻页超过 {MAX_PAGES_PER_CATEGORY} 页仍未结束")
-
-
-async def _category_skills(client: httpx.AsyncClient, code: str) -> tuple[list[dict[str, Any]], Optional[str]]:
-    """带缓存的单类目：失败不抛，回旧缓存（可能为空）+ 错误消息。"""
-    cached = _category_cache.get(code)
-    if cached and (time.monotonic() - cached[0]) < CATALOG_TTL_SECONDS:
-        return cached[1], None
-    try:
-        skills = await _fetch_category(client, code)
-    except SkillUpstreamError as err:
-        return (cached[1] if cached else []), f"{code}: {err}"
-    _category_cache[code] = (time.monotonic(), skills)
-    return skills, None
-
-
-async def get_catalog(refresh: bool = False) -> dict[str, Any]:
-    """全量目录。并发送每个类目（串行时最坏是各类目超时之和，会把前端那次 35s 撑爆）。"""
-    global _last_good
-    errors: list[dict[str, str]] = []
-    if refresh:
-        _category_cache.clear()
-    try:
-        async with sources.make_client() as client:
-            codes = await _category_codes(client)
-            # gather 按入参顺序返回，所以目录顺序仍跟类目清单一致
-            results = await asyncio.gather(*(_category_skills(client, c) for c in codes))
-    except SkillUpstreamError as err:
-        # 连类目都拿不到：有旧目录就用旧的，一条错误跟着回去
-        errors.append({"source": "agent-skills", "message": str(err)[:300]})
-        cached = _last_good[1] if _last_good else []
-        return {"skills": cached, "errors": errors}
-
-    merged: dict[str, dict[str, Any]] = {}
-    for listed, err in results:
-        for s in listed:
-            merged[str(s["name"])] = s
-        if err:
-            errors.append({"source": "agent-skills", "message": err[:300]})
-    skills = list(merged.values())
-
-    # 守卫二：跌幅。逐类目那条只挡得住"某类目报错"，挡不住"某类目静默返回 0 条"。
-    if _last_good and skills and len(skills) < len(_last_good[1]) * MIN_COUNT_RATIO:
-        errors.append(
-            {
-                "source": "agent-skills",
-                "message": f"目录条数 {len(skills)} 不足上次成功结果 {len(_last_good[1])} 的 90%，判为未取全，回退旧目录",
-            }
-        )
-        return {"skills": _last_good[1], "errors": errors}
-    if skills:
-        _last_good = (time.monotonic(), skills)
-    return {"skills": skills, "errors": errors}
-
-
-async def search(keyword: str, max_results: int) -> dict[str, Any]:
-    """上游语义检索透传（模型用 skill_search 时走这里，也是面板的搜索框）。"""
-    try:
-        async with sources.make_client() as client:
-            data = await _get_json(
-                client,
-                "/openapi/for-agent/skills",
-                {"keyword": keyword, "searchMode": "semantic", "maxResults": max_results},
-            )
-    except SkillUpstreamError as err:
-        return {"skills": [], "errors": [{"source": "agent-skills", "message": str(err)[:300]}]}
-    rows = data.get("data") or []
-    return {
-        "skills": [_normalize(r) for r in rows if isinstance(r, dict) and r.get("skillName")],
-        "errors": [],
-    }
-
-
-async def find_skill(name: str) -> dict[str, Any] | None:
-    """按名取目录项（拿 githubPath 用）。目录没命中返回 None，不猜路径。"""
-    catalog = await get_catalog()
-    for s in catalog["skills"]:
-        if s["name"] == name:
-            return s
-    return None
+def _err(message: str, source: str = SOURCE_LABEL) -> dict[str, str]:
+    return {"source": source, "message": message[:300]}
 
 
 def _clip(text: str, limit: int, what: str) -> tuple[str, bool, int]:
@@ -188,50 +43,107 @@ def _clip(text: str, limit: int, what: str) -> tuple[str, bool, int]:
     return text[:limit] + tail, True, original
 
 
-async def get_content(name: str) -> dict[str, Any]:
-    """一份 SKILL.md 全文。正文不缓存（K7）：照旧版手册产出是真会失效的。"""
+class NotFound(Exception):
+    """两家都没有这个技能。"""
+
+
+async def _collect(refresh: bool = False) -> dict[str, Any]:
+    """合成目录。refresh 会连带清掉解包缓存 —— 面板上那个"刷新目录"要的是真的重新取包。"""
+    errors: list[dict[str, str]] = []
     try:
-        async with sources.make_client() as client:
-            data = await _get_json(client, f"/openapi/for-agent/skills/{name}", {})
-    except SkillUpstreamError as err:
+        rows: list[dict[str, Any]] = list(local.get_listing())
+    except OSError as err:
+        # 读本地目录能失败的场合只有权限/坏软链，仍然要报出来而不是一份空目录
+        errors.append(_err(f"内置技能目录读取失败：{err}", "local"))
+        rows = []
+
+    if refresh:
+        bailian.invalidate()
+    try:
+        remote = await bailian.get_listing()
+    except bailian.BailianError as err:
+        errors.append(_err(str(err), "bailian"))
+        remote = []
+    errors.extend(_err(w, "bailian") for w in bailian.get_warnings())
+
+    taken = {r["name"] for r in rows}
+    for row in remote:
+        if row["name"] in taken:
+            errors.append(
+                _err(f"百炼技能 {row['name']} 与内置技能同名，已忽略百炼那份（内置优先）", "bailian")
+            )
+            continue
+        rows.append(row)
+    return {"skills": rows, "errors": errors}
+
+
+async def get_catalog(refresh: bool = False) -> dict[str, Any]:
+    return await _collect(refresh)
+
+
+async def search(keyword: str, max_results: int) -> dict[str, Any]:
+    """按关键词过一遍合成后的目录。
+
+    不是"上游语义检索"：百炼这个接口没有 keyword 参数。技能量级是"内置几个 + 你自己上传的那些"，
+    本地子串匹配够用，而且诚实 —— 索引里没有的技能，我们不会假装搜得到。
+    """
+    collected = await _collect()
+    needle = keyword.lower()
+    hits = [
+        s
+        for s in collected["skills"]
+        if needle in s["name"].lower() or needle in str(s["description"]).lower()
+    ]
+    return {"skills": hits[:max_results], "errors": collected["errors"]}
+
+
+async def _open(name: str) -> tuple[dict[str, bytes], str]:
+    """按名字取整包，返回 (成员, 来源标签)。内置优先 —— 与目录里的同名去重是同一条规则。"""
+    if local.has_skill(name):
+        return local.get_package(name), "local"
+    row = await bailian.find_skill(name)
+    if row is None:
+        raise NotFound(name)
+    return await bailian.get_package(row), "bailian"
+
+
+async def get_content(name: str) -> dict[str, Any]:
+    """一份 SKILL.md 正文，按 K4 上界截断。"""
+    try:
+        members, origin = await _open(name)
+    except NotFound:
+        return {"text": f"技能正文未找到：目录里没有 {name}", "is_error": True}
+    except (bailian.BailianError, local.LocalSkillError) as err:
         return {"text": f"技能正文获取失败：{err}", "is_error": True}
-    # 实测详情端点的正文在**顶层** content（旧探测脚本有一份按 data.content 读，是错的）
-    content = data.get("content")
-    if not isinstance(content, str) and isinstance(data.get("data"), dict):
-        content = data["data"].get("content")
-    if not isinstance(content, str) or not content:
-        return {"text": f"技能正文获取失败：{name} 无正文", "is_error": True}
-    text, truncated, original = _clip(content, MAX_CONTENT_CHARS, "技能正文")
+    blob = members.get("SKILL.md")
+    if blob is None:
+        return {"text": f"技能正文未找到：{name}（{origin}）的包里没有 SKILL.md", "is_error": True}
+    text, truncated, original = _clip(blob.decode("utf-8", "replace"), MAX_CONTENT_CHARS, "技能正文")
     return {"text": text, "truncated": truncated, "original_chars": original, "is_error": False}
 
 
 async def get_reference(name: str, path: str) -> dict[str, Any]:
-    """取该技能包内的一个 references/*.md。
+    """某个技能包内的一个 references/*.md，按 K6 上界截断。
 
-    顺序是刻意的：**先**做零 I/O 的语法校验，畸形 path 在这里就回绝 —— 目录查询本身要发外部请求，
-    不该为一次注入尝试去发它。通过之后才查目录取 githubPath，拼装时再核一次 host。
+    顺序照旧：**先**做零 I/O 的语法校验，畸形 path 在这里就回绝，一次外部请求都不发。
     """
     if not sources.validate_reference_path(path):
         return {
             "text": f"引用文件路径不合规则：只允许该技能 references/ 下的 .md 文件（收到 {path[:80]!r}）",
             "is_error": True,
         }
-    entry = await find_skill(name)
-    if not entry:
-        return {"text": f"引用文件未找到：目录里没有技能 {name}", "is_error": True}
-    url = sources.reference_url(entry.get("githubPath") or "", path)
-    if url is None:
+    try:
+        members, _origin = await _open(name)
+    except NotFound:
+        return {"text": f"引用文件未找到：目录里没有 {name}", "is_error": True}
+    except (bailian.BailianError, local.LocalSkillError) as err:
+        return {"text": f"引用文件读取失败：{err}", "is_error": True}
+    blob = members.get(path)
+    if blob is None:
+        listed = "、".join(sorted(k for k in members if k.startswith("references/"))) or "（这个包里没有 references 文件）"
         return {
-            "text": f"引用文件路径不合规则：该技能的目录形状无法安全解析（{path[:80]!r}）",
+            "text": f"引用文件未找到：{name} 的包里没有 {path}。有的文件：{listed}",
             "is_error": True,
         }
-    try:
-        async with sources.make_client() as client:
-            resp = await client.get(url)
-    except Exception as err:  # noqa: BLE001
-        return {"text": f"引用文件读取失败：{type(err).__name__}: {err}", "is_error": True}
-    if resp.status_code != 200:
-        # 实测正文里 2,074 条 references 引用有 15% 在包里对不上文件，这是必然发生的边角
-        return {"text": f"引用文件未找到：HTTP {resp.status_code}（{path}）", "is_error": True}
-    text, truncated, original = _clip(resp.text, MAX_FILE_CHARS, "引用文件")
+    text, truncated, original = _clip(blob.decode("utf-8", "replace"), MAX_FILE_CHARS, "引用文件")
     return {"text": text, "truncated": truncated, "original_chars": original, "is_error": False}
