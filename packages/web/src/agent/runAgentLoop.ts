@@ -5,7 +5,7 @@ import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { mergeToolCalls } from './toolProgress'
 import { mcpCapabilitiesReady } from './providers/mcp'
-// 这条 import 不能删：providers/skills 在模块初始化时就静态注册了 source 'agent-skills'
+// 这条 import 不能删：providers/skills 在模块初始化时就静态注册了 source 'skills'
 // 与 skill_search / skill_load / skill_file 三个工具（它们不等任何异步清单，所以不占下面那场 race）。
 import { buildSkillIndexSection } from './providers/skills'
 import { getEnabledSourceIds } from './capabilityStore'

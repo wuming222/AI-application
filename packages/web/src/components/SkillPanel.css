@@ -1,0 +1,105 @@
+/* 技能面板（独立 Popover 内容）：逐技能开关，行形态与 CapabilityPanel 的 MCP 行一致。
+   尺度取 tokens.css，颜色取 --app-*。
+   只保留固有尺寸：面板 width 320px（实测取值 —— flex 列里子项按 max-content 参与宽度计算，
+   只给 min-width 时"只生成不执行"那句长文案会把弹层撑到 833px 并被视口裁掉，必须定宽让它换行）、
+   列表 max-height 220px（滚动限高） */
+
+.skill-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 320px;
+}
+
+.skill-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.skill-panel-title {
+  font-size: var(--font-sm);
+  color: var(--app-text-secondary);
+}
+
+.skill-panel-count {
+  font-size: var(--font-xs);
+  color: var(--app-text-tertiary);
+}
+
+.skill-panel-notice {
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--app-text-secondary);
+  border-left: var(--space-1) var(--app-split) solid;
+  padding-left: var(--space-2);
+}
+
+.skill-panel-over-cap {
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--app-warning);
+}
+
+.skill-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+  max-height: 220px;
+}
+
+.skill-panel-empty {
+  font-size: var(--font-sm);
+  color: var(--app-text-tertiary);
+}
+
+/* 一行 = 来源标签 + 技能名 + 小开关，与 .capability-panel-row 同构 */
+.skill-panel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--font-sm);
+  color: var(--app-text-secondary);
+}
+
+.skill-panel-item-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* 来源标签（内置 / 百炼）。width 固定为两个汉字，是为了不同来源的行名字仍左对齐；
+   flex-shrink:0 防止长技能名把它压扁。这类"字本身的尺寸"属例外，不取令牌。 */
+.skill-panel-item-tag {
+  flex-shrink: 0;
+  width: 2em;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  text-align: center;
+  border-radius: var(--radius-xs);
+  background: var(--app-fill-tertiary);
+  color: var(--app-text-tertiary);
+}
+
+.skill-panel-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.skill-panel-error {
+  font-size: var(--font-xs);
+  color: var(--app-warning);
+}

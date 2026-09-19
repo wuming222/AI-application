@@ -1,6 +1,6 @@
-/* 能力开关面板（Popover 内容）：MCP 与技能各占一组。尺度取 tokens.css，颜色取 --app-*。
-   只保留固有尺寸：面板 min-width 180px（一行"标签 + 小开关"的下限，与 Sidebar 的列表宽同类）、
-   技能列表 max-height 220px（滚动限高，与已知坑里那条同类） */
+/* 能力开关面板（Popover 内容）：只放外部工具的"标签 + 小开关"行，技能那一家在 SkillPanel.css。
+   尺度取 tokens.css，颜色取 --app-*。
+   只保留固有尺寸：面板 min-width 180px（一行"标签 + 小开关"的下限，与 Sidebar 的列表宽同类） */
 
 .capability-panel {
   display: flex;
@@ -32,65 +32,4 @@
 .capability-panel-empty {
   font-size: var(--font-sm);
   color: var(--app-text-tertiary);
-}
-
-.capability-panel-notice {
-  font-size: var(--font-xs);
-  line-height: 1.5;
-  color: var(--app-text-secondary);
-  border-left: var(--space-1) var(--app-split) solid;
-  padding-left: var(--space-2);
-}
-
-.capability-panel-sub {
-  font-size: var(--font-xs);
-  color: var(--app-text-tertiary);
-}
-
-.capability-panel-over-cap {
-  color: var(--app-warning);
-}
-
-.capability-panel-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  overflow-y: auto;
-  max-height: 220px;
-}
-
-.capability-panel-item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  font-size: var(--font-sm);
-  color: var(--app-text-secondary);
-}
-
-.capability-panel-item-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capability-panel-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.capability-panel-error {
-  font-size: var(--font-xs);
-  color: var(--app-warning);
-}
-
-.capability-panel-skills {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.capability-panel-skills.is-disabled {
-  opacity: 0.5;
 }

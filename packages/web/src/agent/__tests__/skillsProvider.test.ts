@@ -9,8 +9,8 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 
 const CATALOG_PAYLOAD = {
   skills: [
-    { name: SKILL, displayName: 'OSS 同步', description: '把本地目录同步到 OSS Bucket', categoryCode: 'storage' },
-    { name: 'ecs-diagnose', displayName: 'ECS 诊断', description: '诊断 ECS 实例异常', categoryCode: 'compute' },
+    { name: SKILL, displayName: 'OSS 同步', description: '把本地目录同步到 OSS Bucket', source: 'bailian' },
+    { name: 'requirement-clarify', displayName: '需求梳理', description: '动手前把一句话需求梳理成结构化需求', source: 'local' },
   ],
   errors: [],
 }
@@ -42,22 +42,33 @@ beforeEach(() => {
 })
 
 describe('静态注册', () => {
-  it('导入即注册三个技能工具与 agent-skills source，不需要先拉目录', async () => {
+  it('导入即注册三个技能工具与 skills source，不需要先拉目录', async () => {
     const { skills, store, registry } = await loadSkills(() => Promise.reject(new Error('不该发请求')))
+    skills.setSkillEnabled(SKILL, true)
     const defs = registry.getDefinitionsFor(store.getEnabledSourceIds()).map((d) => d.name)
 
     expect(defs).toEqual(expect.arrayContaining(['skill_search', 'skill_load', 'skill_file']))
-    expect(skills.SKILL_SOURCE_ID).toBe('agent-skills')
-    expect(store.isSourceEnabled('agent-skills')).toBe(true)
+    expect(skills.SKILL_SOURCE_ID).toBe('skills')
+    expect(store.isSourceEnabled('skills')).toBe(true)
   })
 
-  it('source 被关掉时三个工具都不发给模型，但注册表不注销', async () => {
-    const { store, registry } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    store.setSourceEnabled('agent-skills', false)
+  it('一个技能都没开着时这一家算关：三个工具都不发给模型', async () => {
+    const { store, registry } = await loadSkills(() => Promise.reject(new Error('不该发请求')))
 
+    expect(store.isSourceEnabled('skills')).toBe(false)
     expect(registry.getDefinitionsFor(store.getEnabledSourceIds()).map((d) => d.name)).not.toContain('skill_load')
     // 内置 fs 工具与 MCP 的筛选互不影响，注册表仍留着技能定义
-    expect(registry.getDefinitionsFor(new Set(['agent-skills'])).map((d) => d.name)).toContain('skill_load')
+    expect(registry.getDefinitionsFor(new Set(['skills'])).map((d) => d.name)).toContain('skill_load')
+  })
+
+  it('开关从 0 个变成 1 个会让能力快照换引用，definitions 下一轮就带上技能工具', async () => {
+    const { skills, store, registry } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    const before = store.getCapabilitySnapshot()
+
+    skills.setSkillEnabled(SKILL, true)
+
+    expect(store.getCapabilitySnapshot()).not.toBe(before)
+    expect(registry.getDefinitionsFor(store.getEnabledSourceIds()).map((d) => d.name)).toContain('skill_load')
   })
 
   it('三个工具的 description 都写了"不执行任何命令"，约束在模型做选择那一刻就到位', async () => {
@@ -70,20 +81,20 @@ describe('静态注册', () => {
 })
 
 describe('常驻索引段（K3）', () => {
-  it('勾选 0 个时不注入该段', async () => {
+  it('关掉全部技能时不注入该段', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
     expect(skills.buildSkillIndexSection()).toBe('')
   })
 
-  it('勾选后按 name: description 列出，并带上只生成不执行的声明', async () => {
+  it('开一个技能后按 [来源] name: description 列出，并带上只生成不执行的声明', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    skills.setSkillSelected(SKILL, true)
-    skills.setSkillSelected('ecs-diagnose', true)
+    skills.setSkillEnabled(SKILL, true)
+    skills.setSkillEnabled('requirement-clarify', true)
     await skills.loadSkillCatalog()
 
     const text = skills.buildSkillIndexSection()
-    expect(text).toContain(`- ${SKILL}: 把本地目录同步到 OSS Bucket`)
-    expect(text).toContain('- ecs-diagnose: 诊断 ECS 实例异常')
+    expect(text).toContain(`- [百炼] ${SKILL}: 把本地目录同步到 OSS Bucket`)
+    expect(text).toContain('- [内置] requirement-clarify: 动手前把一句话需求梳理成结构化需求')
     expect(text).toContain('本应用不执行任何命令')
   })
 
@@ -93,6 +104,7 @@ describe('常驻索引段（K3）', () => {
       name: `skill-${i}`,
       displayName: `技能 ${i}`,
       description: `说明 ${i}：`.padEnd(200, '字'),
+      origin: (i % 2 ? 'bailian' : 'local') as 'bailian' | 'local',
     }))
 
     const r = skills.renderSkillIndex(many)
@@ -100,7 +112,7 @@ describe('常驻索引段（K3）', () => {
     // 只断言"没超"会连"根本没塞满"一起放过，这条才证明闸真的咬住了
     expect(r.text.length).toBeGreaterThan(skills.SKILL_INDEX_BUDGET_CHARS - 200)
     expect(r.omitted).toBeGreaterThan(0)
-    expect(r.text).toContain(`另有 ${r.omitted} 个已选技能未列入目录`)
+    expect(r.text).toContain(`另有 ${r.omitted} 个已开技能未列入目录`)
     expect(r.text).toContain('skill_search')
     expect(r.included).toBe(many.length - r.omitted)
   })
@@ -108,27 +120,30 @@ describe('常驻索引段（K3）', () => {
   it('预算够时一行提示也不留，全部列进来', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
     const r = skills.renderSkillIndex([
-      { name: 'a', displayName: 'A', description: '短' },
-      { name: 'b', displayName: 'B', description: '短' },
+      { name: 'a', displayName: 'A', description: '短', origin: 'local' },
+      { name: 'b', displayName: 'B', description: '短', origin: 'bailian' },
     ])
     expect(r.omitted).toBe(0)
     expect(r.text).not.toContain('另有')
+    expect(r.text).toContain('- [内置] a: 短')
+    expect(r.text).toContain('- [百炼] b: 短')
   })
 
-  it('勾了但目录里查不到的技能不会静默消失', async () => {
+  it('开着但目录里查不到的技能不会静默消失', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    skills.setSkillSelected('gone-skill', true)
-    // 目录没加载：勾选集里有名字却解析不出说明，这句是唯一的可观测痕迹
-    expect(skills.buildSkillIndexSection()).toContain('1 个已选技能暂时查不到说明')
+    skills.setSkillEnabled('gone-skill', true)
+    // 目录没加载：开关集里有名字却解析不出说明，这句是唯一的可观测痕迹
+    expect(skills.buildSkillIndexSection()).toContain('1 个已开技能暂时查不到说明')
   })
 })
 
 describe('三个执行器', () => {
   it('skill_load 把"只生成不执行"前言拼在正文头部（随正文一起落库回放）', async () => {
     const body = 'ECS 诊断手册'.repeat(10)
-    const { registry } = await loadSkills((url) =>
+    const { skills, registry } = await loadSkills((url) =>
       Promise.resolve(url.includes('/api/skills/content') ? { text: body, is_error: false } : CATALOG_PAYLOAD)
     )
+    skills.setSkillEnabled(SKILL, true)
 
     const res = await registry.executeDetailed('skill_load', { name: SKILL }, CTX)
 
@@ -138,7 +153,8 @@ describe('三个执行器', () => {
   })
 
   it('skill_load / skill_file / skill_search 全程不读写工作区', async () => {
-    const { registry, workspace } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    const { skills, registry, workspace } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    skills.setSkillEnabled(SKILL, true)
     workspace.setState({ filesBySession: { 'session-a': { 'index.html': '<html>' } } })
     const before = workspace.getState().filesBySession
 
@@ -152,13 +168,14 @@ describe('三个执行器', () => {
   })
 
   it('引用文件未找到时回 isError，并明确让模型别编内容', async () => {
-    const { registry } = await loadSkills((url) =>
+    const { skills, registry } = await loadSkills((url) =>
       Promise.resolve(
         url.includes('/api/skills/file')
           ? { text: '引用文件未找到：HTTP 404（references/ghost.md）', is_error: true }
           : CATALOG_PAYLOAD,
       )
     )
+    skills.setSkillEnabled(SKILL, true)
 
     const res = await registry.executeDetailed('skill_file', { name: SKILL, path: 'references/ghost.md' }, CTX)
 
@@ -169,35 +186,59 @@ describe('三个执行器', () => {
 
   it('检索结果带 name 与说明，超长说明就地截断并指向 skill_load', async () => {
     const long = '详细触发词'.repeat(100)
-    const { registry } = await loadSkills((url) =>
+    const { skills, registry } = await loadSkills((url) =>
       Promise.resolve(
         url.includes('/api/skills/search')
-          ? { skills: [{ name: 'oss-sync', displayName: 'OSS', description: long, categoryCode: 'storage' }], errors: [] }
+          ? { skills: [{ name: 'oss-sync', displayName: 'OSS', description: long, source: 'bailian' }], errors: [] }
           : CATALOG_PAYLOAD,
       )
     )
+    skills.setSkillEnabled('oss-sync', true)
 
     const res = await registry.executeDetailed('skill_search', { keyword: '同步到 OSS' }, CTX)
 
     expect(res.isError).toBeFalsy()
-    expect(res.text).toContain('- oss-sync [storage]:')
+    expect(res.text).toContain('- oss-sync [百炼]:')
     expect(res.text).toContain('说明已截断')
     expect(res.text.length).toBeLessThan(600)
   })
 
+  it('检索只覆盖开关打开的那些：关着的技能即使目录里有也不回给模型', async () => {
+    const { skills, registry } = await loadSkills((url) =>
+      Promise.resolve(
+        url.includes('/api/skills/search')
+          ? {
+              skills: [
+                { name: SKILL, displayName: 'OSS 同步', description: '开着的那个', source: 'bailian' },
+                { name: 'requirement-clarify', displayName: '需求梳理', description: '没开的那个', source: 'local' },
+              ],
+              errors: [],
+            }
+          : CATALOG_PAYLOAD,
+      )
+    )
+    skills.setSkillEnabled(SKILL, true)
+
+    const res = await registry.executeDetailed('skill_search', { keyword: '同步' }, CTX)
+
+    expect(res.text).toContain(SKILL)
+    expect(res.text).not.toContain('requirement-clarify')
+    expect(res.text).not.toContain('没开的那个')
+  })
+
   it('上游说失败（HTTP 仍 200）时透传 isError，界面画成 ✗', async () => {
-    const { registry } = await loadSkills(() =>
+    const { skills, registry } = await loadSkills(() =>
       Promise.resolve({ text: '技能正文获取失败：HTTP 500', is_error: true })
     )
+    skills.setSkillEnabled(SKILL, true)
     const res = await registry.executeDetailed('skill_load', { name: SKILL }, CTX)
 
     expect(res.isError).toBe(true)
     expect(res.text).toContain('技能正文获取失败')
   })
 
-  it('source 关掉时三个工具都不发请求，回一句能让模型改口的 isError', async () => {
-    const { skills, store, registry, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    store.setSourceEnabled('agent-skills', false)
+  it('关掉全部技能时三个工具都不发请求，回一句能让模型改口的 isError', async () => {
+    const { skills, registry, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
     fetchMock.mockClear()
 
     for (const [name, args] of [
@@ -207,14 +248,35 @@ describe('三个执行器', () => {
     ] as const) {
       const res = await registry.executeDetailed(name, args, CTX)
       expect(res.isError).toBe(true)
-      expect(res.text).toContain('能力未启用')
+      expect(res.text).toContain('没有任何打开的技能')
     }
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(skills.getSelectedSkillNames()).toEqual([])
+    expect(skills.getEnabledSkillNames()).toEqual([])
+  })
+
+  it('只关这一个技能时按名拒绝并指向面板，不会去取它的内容', async () => {
+    const { skills, registry, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    skills.setSkillEnabled(SKILL, true)
+    fetchMock.mockClear()
+
+    const off = await registry.executeDetailed('skill_load', { name: 'requirement-clarify' }, CTX)
+    expect(off.isError).toBe(true)
+    expect(off.text).toContain('技能 requirement-clarify 的开关没打开')
+    expect(off.text).toContain('技能面板')
+
+    expect(
+      (await registry.executeDetailed('skill_file', { name: 'requirement-clarify', path: 'references/a.md' }, CTX)).text,
+    ).toContain('技能 requirement-clarify 的开关没打开')
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    // 同一次调用里开着的那个仍可取
+    expect((await registry.executeDetailed('skill_load', { name: SKILL }, CTX)).isError).toBeFalsy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('缺参数时不发请求，直接回 isError 告诉模型怎么补', async () => {
-    const { registry, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    const { skills, registry, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
+    skills.setSkillEnabled(SKILL, true)
     fetchMock.mockClear()
 
     expect((await registry.executeDetailed('skill_load', {}, CTX)).isError).toBe(true)
@@ -224,73 +286,73 @@ describe('三个执行器', () => {
   })
 })
 
-describe('勾选集是全局偏好', () => {
+describe('开关集是全局偏好', () => {
   it('落在 skills-selected 这一个 key 上，与会话无关', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    skills.setSkillSelected(SKILL, true)
+    skills.setSkillEnabled(SKILL, true)
 
     expect(JSON.parse(localStorage.getItem('skills-selected') ?? '[]')).toEqual([SKILL])
     expect(localStorage.getItem('chat-messages')).toBeNull()
   })
 
-  it('刷新后读回上次勾选', async () => {
+  it('刷新后读回上次开关集', async () => {
     localStorage.setItem('skills-selected', JSON.stringify([SKILL]))
     vi.resetModules()
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(CATALOG_PAYLOAD)))
     const skills = await import('../providers/skills')
 
-    expect(skills.getSelectedSkillNames()).toEqual([SKILL])
-    expect(skills.isSkillSelected(SKILL)).toBe(true)
+    expect(skills.getEnabledSkillNames()).toEqual([SKILL])
+    expect(skills.isSkillEnabled(SKILL)).toBe(true)
   })
 
-  it('坏数据与隐私模式都退回空勾选，不抛出', async () => {
+  it('坏数据与隐私模式都退回空开关集，不抛出', async () => {
     localStorage.setItem('skills-selected', '{not json')
     vi.resetModules()
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(CATALOG_PAYLOAD)))
     const skills = await import('../providers/skills')
 
-    expect(skills.getSelectedSkillNames()).toEqual([])
+    expect(skills.getEnabledSkillNames()).toEqual([])
 
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError')
     })
-    expect(() => skills.setSkillSelected(SKILL, true)).not.toThrow()
-    expect(skills.isSkillSelected(SKILL)).toBe(true)
+    expect(() => skills.setSkillEnabled(SKILL, true)).not.toThrow()
+    expect(skills.isSkillEnabled(SKILL)).toBe(true)
   })
 
-  it('目录加载后洗掉已下架的勾选项', async () => {
+  it('目录加载后洗掉已下架的开关项', async () => {
     const { skills } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD), {
       'skills-selected': JSON.stringify([SKILL, 'gone-skill']),
     })
     await skills.loadSkillCatalog()
 
-    expect(skills.getSelectedSkillNames()).toEqual([SKILL])
+    expect(skills.getEnabledSkillNames()).toEqual([SKILL])
     expect(JSON.parse(localStorage.getItem('skills-selected') ?? '[]')).toEqual([SKILL])
   })
 
-  it('取消最后一个勾选项后长度变化能落盘（幂等：重复勾同一项不写）', async () => {
+  it('取消最后一个开关项后长度变化能落盘（幂等：重复开同一项不写）', async () => {
     const { skills, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
-    skills.setSkillSelected(SKILL, true)
+    skills.setSkillEnabled(SKILL, true)
     fetchMock.mockClear()
 
-    skills.setSkillSelected(SKILL, true)
-    expect(skills.getSelectedSkillNames()).toEqual([SKILL])
-    skills.setSkillSelected(SKILL, false)
-    expect(skills.getSelectedSkillNames()).toEqual([])
+    skills.setSkillEnabled(SKILL, true)
+    expect(skills.getEnabledSkillNames()).toEqual([SKILL])
+    skills.setSkillEnabled(SKILL, false)
+    expect(skills.getEnabledSkillNames()).toEqual([])
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
 describe('目录加载', () => {
-  it('App 挂载时的预热只在有勾选时发请求', async () => {
+  it('App 挂载时的预热只在有开关开着时发请求', async () => {
     const { skills, fetchMock } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
     fetchMock.mockClear()
 
-    skills.loadSkillCatalogIfSelected()
+    skills.loadSkillCatalogIfEnabled()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    skills.setSkillSelected(SKILL, true)
-    skills.loadSkillCatalogIfSelected()
+    skills.setSkillEnabled(SKILL, true)
+    skills.loadSkillCatalogIfEnabled()
     await skills.loadSkillCatalog()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/skills/catalog')
@@ -306,7 +368,7 @@ describe('目录加载', () => {
     expect(skills.getSkillCatalogState().loaded).toBe(false)
 
     await skills.loadSkillCatalog()
-    expect(skills.getSkillCatalogState().skills.map((s) => s.name)).toEqual([SKILL, 'ecs-diagnose'])
+    expect(skills.getSkillCatalogState().skills.map((s) => s.name)).toEqual([SKILL, 'requirement-clarify'])
   })
 
   it('dev proxy 模式下拿到的是 SPA 外壳（200 但非 JSON）：退化成"目录未加载"而不是空目录', async () => {
@@ -329,18 +391,18 @@ describe('目录加载', () => {
     expect(state.errors.length).toBe(1)
   })
 
-  it('后端报的类目异常透出来给面板，不会被当成"目录本来就这么点"', async () => {
+  it('后端报的目录异常透出来给面板，不会被当成"目录本来就这么点"', async () => {
     const { skills } = await loadSkills(() =>
       Promise.resolve({
         skills: [
-          { name: SKILL, displayName: 'OSS 同步', description: 'd', categoryCode: 'storage' },
-          { name: 'x', displayName: 'X', description: 'd', categoryCode: 'compute' },
+          { name: SKILL, displayName: 'OSS 同步', description: 'd', source: 'bailian' },
+          { name: 'x', displayName: 'X', description: 'd', source: 'local' },
         ],
-        errors: [{ source: 'agent-skills', message: 'playbooks: HTTP 400' }],
+        errors: [{ source: 'bailian', message: 'my-new-skill 状态为 checking，未列入（仅 active 可用）' }],
       })
     )
     await skills.loadSkillCatalog()
 
-    expect(skills.getSkillCatalogState().errors).toEqual(['playbooks: HTTP 400'])
+    expect(skills.getSkillCatalogState().errors).toEqual(['my-new-skill 状态为 checking，未列入（仅 active 可用）'])
   })
 })

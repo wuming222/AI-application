@@ -6,7 +6,7 @@ import { PreviewArea } from './components/PreviewArea'
 import { Sidebar } from './components/Sidebar'
 import { useSessionStore } from './store/sessionStore'
 import { loadMcpCapabilities } from './agent/providers/mcp'
-import { loadSkillCatalogIfSelected } from './agent/providers/skills'
+import { loadSkillCatalogIfEnabled } from './agent/providers/skills'
 import './App.css'
 
 /**
@@ -50,10 +50,10 @@ export default function App() {
 
   // MCP 清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
   // 它是全局偏好，不是会话状态，所以不进任何 store 分片。
-  // 技能目录要按 18 个类目逐个翻页，代价比 MCP 清单高，所以只在用户勾过技能时才预热。
+  // 技能目录里百炼那一次列表要走外网、带鉴权，代价比 MCP 清单高，所以一个技能都没开着时不预热。
   useEffect(() => {
     loadMcpCapabilities()
-    loadSkillCatalogIfSelected()
+    loadSkillCatalogIfEnabled()
   }, [])
 
   const onMouseDown = useCallback(() => {
