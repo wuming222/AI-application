@@ -84,7 +84,10 @@ function migrateLegacyOverrides(): void {
 function recompute(): void {
   const overrides = readOverrides()
   const enabled: Record<string, boolean> = {}
-  for (const s of sources) enabled[s.id] = overrides[s.id] ?? s.defaultEnabled
+  for (const s of sources) {
+    // 派生源不看存值：它的开关在别处（技能 = 逐技能开关），这里再读一份布尔就是第二个真相源
+    enabled[s.id] = s.resolveEnabled ? s.resolveEnabled() : (overrides[s.id] ?? s.defaultEnabled)
+  }
   snapshot = { sources: [...sources], enabled }
 }
 
@@ -117,6 +120,23 @@ export function setSourceEnabled(id: string, on: boolean): void {
   writeOverrides({ ...readOverrides(), [id]: on })
   recompute()
   notify()
+}
+
+/**
+ * 下面两个是给"某家的开关语义变了"那种一次性迁移用的原语：哪个 id 已经死了、
+ * 旧值意味着什么，只有那家自己知道，所以判断留在 provider 里，这里只负责读写存值。
+ */
+export function peekSourceOverride(id: string): boolean | undefined {
+  const value = readOverrides()[id]
+  return typeof value === 'boolean' ? value : undefined
+}
+
+export function forgetSourceOverride(id: string): void {
+  const overrides = readOverrides()
+  if (!(id in overrides)) return
+  const next = { ...overrides }
+  delete next[id]
+  writeOverrides(next)
 }
 
 /**

@@ -22,6 +22,12 @@ export interface CapabilitySourceInfo {
   label: string
   kind: CapabilityKind
   defaultEnabled: boolean
+  /**
+   * 有的家"开不开"不是用户直接翻的布尔值，而是从别处派生的（技能：只要还有一个技能开着）。
+   * 给了它就绕开 `capabilities-enabled` 里那一格 —— 再存一份布尔值就是双真相源，
+   * 两边不一致时界面显示的和实际注册的工具会分家。
+   */
+  resolveEnabled?: () => boolean
 }
 
 /** 能力（MCP + skill）的整体可读状态（全局偏好，不分会话）。引用稳定，供 useSyncExternalStore 用。 */

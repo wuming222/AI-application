@@ -146,6 +146,67 @@ describe('清单加载与注册', () => {
   })
 })
 
+describe('技能没有总闸：派生 enabled 与旧值迁移', () => {
+  /** 技能一家的开关在 `skills-selected`，`capabilities-enabled` 里那一格已经没人读了。 */
+  async function loadSkillsProvider(seed: Record<string, string>) {
+    vi.resetModules()
+    localStorage.clear()
+    for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v)
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(TOOLS_PAYLOAD)))
+    const skills = await import('../providers/skills')
+    const store = await import('../capabilityStore')
+    return { skills, store }
+  }
+
+  it('有一个技能开着这一家才算开，全关即整家关（不看存值）', async () => {
+    const { skills, store } = await loadSkillsProvider({})
+    expect(store.isSourceEnabled('skills')).toBe(false)
+
+    skills.setSkillEnabled('requirement-clarify', true)
+    expect(store.isSourceEnabled('skills')).toBe(true)
+
+    skills.setSkillEnabled('requirement-clarify', false)
+    expect(store.isSourceEnabled('skills')).toBe(false)
+  })
+
+  it('派生值盖过存值：那一格被写成 false 也不影响"开了技能就是开"', async () => {
+    const { skills, store } = await loadSkillsProvider({})
+    // 死值清一次就够，之后谁再写这格（旧代码路径、手改 localStorage）都不该有读者
+    store.setSourceEnabled('skills', false)
+    skills.setSkillEnabled('requirement-clarify', true)
+
+    expect(JSON.parse(localStorage.getItem('capabilities-enabled') ?? '{}').skills).toBe(false)
+    expect(store.isSourceEnabled('skills')).toBe(true)
+  })
+
+  it('旧的"总闸关"搬成"逐技能全关"，并把那一格从存储里清掉', async () => {
+    const { skills, store } = await loadSkillsProvider({
+      'capabilities-enabled': JSON.stringify({ 'agent-skills': false, [AMAP]: false }),
+      'skills-selected': JSON.stringify(['requirement-clarify']),
+    })
+
+    expect(skills.getEnabledSkillNames()).toEqual([])
+    expect(store.isSourceEnabled('skills')).toBe(false)
+    const saved = JSON.parse(localStorage.getItem('capabilities-enabled') ?? '{}') as Record<string, boolean>
+    expect(saved['agent-skills']).toBeUndefined()
+    expect(saved['skills']).toBeUndefined()
+    // 同一次写入不能把别家的设置顺手弄丢
+    expect(saved[AMAP]).toBe(false)
+  })
+
+  it('旧总闸是开的（或从没碰过）时不清空逐技能开关集', async () => {
+    const on = await loadSkillsProvider({
+      'capabilities-enabled': JSON.stringify({ 'agent-skills': true }),
+      'skills-selected': JSON.stringify(['requirement-clarify']),
+    })
+    expect(on.skills.getEnabledSkillNames()).toEqual(['requirement-clarify'])
+    expect(on.store.isSourceEnabled('skills')).toBe(true)
+
+    const untouched = await loadSkillsProvider({ 'skills-selected': JSON.stringify(['a', 'b']) })
+    expect(untouched.skills.getEnabledSkillNames()).toEqual(['a', 'b'])
+  })
+})
+
 describe('逐 source 开关', () => {
   it('defaultEnabled 决定初值，AntV 默认关', async () => {
     const { store } = await loadTools()
