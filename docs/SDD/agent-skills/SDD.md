@@ -1,7 +1,7 @@
 # 阿里云 Agent Skill 接入（capability 统一抽象 + skill provider） - SDD
 
 需求来源：`docs/origin/26-9-19.md`（外部事实实测、第 7 节统一抽象、第 8 节 K1-K10 硬数字推导、第 9 节可借鉴实践）。
-路线已定：A（只注入知识、不执行），依据 2026-09-19 用户"可以按工作流执行"的授权。
+路线：A（只注入知识、不执行）。**这是推断不是点名** —— 用户的授权是"按工作流执行"（2026-09-19），B（让 agent 真去执行云侧命令）当场被否，C（云端开通执行面）不在本项目可控范围内，A 是剩下的唯一一条。若这不是你要的路线，现在改还来得及。
 
 ## 需求
 
@@ -35,7 +35,10 @@
 新增 `packages/server/app/skills/`（对齐现有 `app/mcp/` 的分层）与 `app/routes/skills.py`，在 `main.py` 注册。
 
 - `sources.py`：`AGENT_EXPLORER_BASE`、UA `AlibabaCloud-Agent-Skills/<caller>`、`x-acs-version: 2026-03-17`、raw.githubusercontent 前缀。**目录是匿名接口，无 key 可泄**；但 `trust_env=False` + `httpx.Timeout(30.0, connect=10.0)` 与 `mcp/client.py:43` 同策略（本机系统代理那条变量）。
-- `catalog.py`：逐个 `categoryCode` 翻页取全 → 297 条（**必须带条数守卫**：少于阈值就当本次拉取失败、用旧缓存，见需求文档第 1 节那条订正教训）；TTL **6 小时**（K7）。
+- `catalog.py`：逐个 `categoryCode` 翻页取全。守卫写成**两条独立断言**，不要写成"总数 == 297"（实测同日重跑只得 269 条，因为 `playbooks` 类目返回 HTTP 400 贡献 0 条 —— 见需求文档第 1 节那条重跑观察）：
+  1. **逐类目**：每个 `categoryCode` 要么成功、要么把失败原样记进 `errors`，绝不把 400 吞成"该类目 0 条"（吞掉就是半份目录，索引成本会被低估一半以上）；
+  2. **总量跌幅**：与"上一次成功结果"的条数比对，跌幅 > 10% 才判为拉取不完整、回退旧缓存。阈值是比例不是绝对值（K2 口径），上游下架几个 skill 不能变成永久故障。
+  TTL **6 小时**（K7）。
 - 四个端点，全部 **HTTP 恒 200、成败在 body**（与 `/api/mcp/*` 同契约，K8）：
   - `GET /api/skills/catalog` → `{ skills: [...], errors: [] }`
   - `GET /api/skills/search?keyword=&maxResults=` → 上游语义检索透传
@@ -71,6 +74,7 @@
 
 - `AGENTS.md`：架构地图补 `agent/capabilityStore.ts`、`agent/providers/*`、`app/skills/`、`routes/skills.py`；**状态不变量那条"外部工具是全局的"改写为"能力是全局的"**，并补一句 skill 正文是会话状态（落库）而勾选集是全局偏好。
 - 零模型 token 的离线验证：`node_modules/.scratch/fake-skill-upstream.py`（假 AgentExplorer + 假 raw 域）+ `skill_routes_check.py`（打四个端点，含 SSRF 用例）+ `skill_budget_probe.py`（断言索引段/正文/份数三道闸的实际字节数）。`pnpm install` 会清掉，按 AGENTS.md 坑 6 重建。
+  > **`skill_budget_probe.py` 这个名字已被占用**：现存那份是 K1 之前的 **÷3 估算**脚本，跑出来的是"索引 11,228 token / 正文 p50 6,284 token"这类**已被否决**的口径（真分词口径是 26,349t 与 4,590t）。验收时不要复用它的旧输出，要么按真分词阈值重写要么换名 —— 否则就是拿被否决的数去证明新阈值成立。
 - 浏览器实测走自启无头实例那条路（AGENTS.md 坑 6：内嵌面板 `visibilityState` 为 hidden 时 rAF 一帧不发）。
 
 ## 验收标准
