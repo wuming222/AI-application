@@ -309,6 +309,26 @@ describe('目录加载', () => {
     expect(skills.getSkillCatalogState().skills.map((s) => s.name)).toEqual([SKILL, 'ecs-diagnose'])
   })
 
+  it('dev proxy 模式下拿到的是 SPA 外壳（200 但非 JSON）：退化成"目录未加载"而不是空目录', async () => {
+    vi.resetModules()
+    localStorage.clear()
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON at position 0')
+      },
+    })))
+    const skills = await import('../providers/skills')
+
+    await expect(skills.loadSkillCatalog()).resolves.toBeUndefined()
+    const state = skills.getSkillCatalogState()
+    expect(state.loaded).toBe(false)
+    expect(state.skills).toEqual([])
+    // 关键：错误要能看见，否则面板上的"目录为空"会被误读成上游真没货
+    expect(state.errors.length).toBe(1)
+  })
+
   it('后端报的类目异常透出来给面板，不会被当成"目录本来就这么点"', async () => {
     const { skills } = await loadSkills(() =>
       Promise.resolve({
