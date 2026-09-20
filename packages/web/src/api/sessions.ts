@@ -1,4 +1,5 @@
 import type { Message } from '../llm/types'
+import { authFetch } from './auth'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -10,9 +11,14 @@ export interface Session {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+  // 先展开 options 再合 headers：原来 `headers: {...}, ...options` 的写法会让调用方传的
+  // headers 把 Content-Type 整个替换掉。凭证由 authFetch 加，这里只管业务头。
+  const res = await authFetch(`${BASE}${path}`, {
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string> | undefined),
+    },
   })
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`)
   return res.json()

@@ -4,9 +4,11 @@ import json
 import uuid
 
 import websockets
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
+from app.auth import bearer_from_websocket, user_from_token
 from app.config import LLM_API_KEY
+from app.spend_log import record as record_spend
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
@@ -18,6 +20,19 @@ UPSTREAM_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 
 @router.websocket("/ws")
 async def voice_ws(websocket: WebSocket):
+    # 浏览器建 WebSocket 时带不了自定义 header，所以这一路的 token 只能走 query，
+    # 也因此 main.py 的 current_user 依赖对它无效 —— 鉴权必须在这里自己做。
+    user = user_from_token(bearer_from_websocket(websocket))
+    if user is None:
+        await websocket.close(code=4401)
+        return
+    try:
+        record_spend(user.id, "voice_ws")
+    except HTTPException:
+        # record 抛的是 HTTPException，在 WS 里不会自己变成 429，只能翻译成关闭码。
+        await websocket.close(code=4429)
+        return
+
     await websocket.accept()
 
     headers = {"Authorization": f"Bearer {LLM_API_KEY}"}

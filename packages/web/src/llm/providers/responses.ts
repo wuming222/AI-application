@@ -1,5 +1,6 @@
 import type { Message, StreamChunk, ToolCall, BuiltInToolStatus, FunctionCallStatus } from '../types'
 import type { StreamChatOptions } from '../router'
+import { authFetch } from '../../api/auth'
 
 export function toResponsesInput(messages: Message[]): Record<string, unknown>[] {
   const systemText = messages
@@ -90,7 +91,7 @@ export async function* streamResponses(
   }
 
   const base = import.meta.env.VITE_API_BASE_URL || ''
-  const res = await fetch(`${base}/api/llm/responses`, {
+  const res = await authFetch(`${base}/api/llm/responses`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

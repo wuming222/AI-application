@@ -2,6 +2,7 @@ import type { CapabilitySourceInfo } from '../types'
 import { registry } from '../toolRegistry'
 import type { ToolResult } from '../toolRegistry'
 import { applyProviderSources, isSourceEnabled } from '../capabilityStore'
+import { authFetch } from '../../api/auth'
 
 /**
  * MCP provider：把服务端的工具清单（见 packages/server/app/mcp/）注册进进程级 registry，
@@ -25,7 +26,7 @@ function makeExecutor(service: string, tool: string) {
       return { text: '外部工具未启用：该 MCP 服务当前在输入框的外部工具开关里是关闭状态。', isError: true }
     }
     try {
-      const res = await fetch(`${BASE}/api/mcp/call`, {
+      const res = await authFetch(`${BASE}/api/mcp/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ service, tool, arguments: args }),
@@ -59,7 +60,7 @@ export function mcpCapabilitiesReady(): Promise<void> {
 async function doLoad(): Promise<void> {
   let listed: CapabilitySourceInfo[] = []
   try {
-    const res = await fetch(`${BASE}/api/mcp/tools`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+    const res = await authFetch(`${BASE}/api/mcp/tools`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = (await res.json()) as {
       servers?: { id?: unknown; label?: unknown; defaultEnabled?: unknown }[]

@@ -9,11 +9,13 @@ import asyncio
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.auth import AuthUser, current_user
 from app.mcp import client
 from app.mcp.servers import MCP_SERVERS, MCPServerConfig, find_server, tool_prefix
+from app.spend_log import record as record_spend
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
@@ -75,7 +77,11 @@ async def list_external_tools(refresh: bool = False):
 
 
 @router.post("/call")
-async def call_external_tool(body: ToolCallRequest):
+async def call_external_tool(
+    body: ToolCallRequest, user: AuthUser = Depends(current_user)
+):
+    # 一次生成会调 N 次工具，所以这一笔只记录、不计入"每天多少轮"（见 spend_log）。
+    record_spend(user.id, "mcp_call")
     cfg = find_server(body.service)
     if not cfg:
         return {"text": f"外部工具未启用：未知的服务 {body.service}", "is_error": True}

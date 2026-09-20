@@ -1,9 +1,11 @@
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from app.auth import AuthUser, current_user
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from app.spend_log import record as record_spend
 
 router = APIRouter(prefix="/api/llm")
 
@@ -53,14 +55,16 @@ async def _proxy_to_upstream(upstream_path: str, body: bytes):
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: Request):
+async def chat_completions(request: Request, user: AuthUser = Depends(current_user)):
     body = await request.body()
+    record_spend(user.id, "llm_chat_completions")
     return await _proxy_to_upstream("/chat/completions", body)
 
 
 @router.post("/responses")
-async def responses(request: Request):
+async def responses(request: Request, user: AuthUser = Depends(current_user)):
     body = await request.body()
+    record_spend(user.id, "llm_responses")
     return await _proxy_to_upstream("/responses", body)
 
 
@@ -69,7 +73,11 @@ class TitleRequest(BaseModel):
 
 
 @router.post("/title")
-async def generate_title(body: TitleRequest):
+async def generate_title(
+    body: TitleRequest, user: AuthUser = Depends(current_user)
+):
+    # title 是一轮之内的副产品，只记录不占用"每天多少轮"那个计数（见 spend_log docstring）。
+    record_spend(user.id, "llm_title")
     upstream_url = f"{LLM_BASE_URL}/chat/completions"
     headers = {"Content-Type": "application/json"}
     if LLM_API_KEY:
