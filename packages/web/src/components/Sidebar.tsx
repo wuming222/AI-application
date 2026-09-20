@@ -149,9 +149,17 @@ export function Sidebar() {
   )
 
   useEffect(() => {
+    // initFirstSession 会 POST 建会话，而它"无会话才建"的判定是 check-then-act、并发下不幂等。
+    // dev 的 StrictMode 双跑实测会打出两次 POST（间隔 21ms）⇒ 新账号一进来看见两条"新对话"。
+    // 卸载时置 cancelled：第一遍在 fetch 落地前就被取消，只有第二遍真正建。
+    let cancelled = false
     loadSessions().then(() => {
+      if (cancelled) return
       useChatStore.getState().initFirstSession()
     })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Resize handlers

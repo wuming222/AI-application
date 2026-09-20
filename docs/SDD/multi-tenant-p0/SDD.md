@@ -80,7 +80,7 @@
 实测顺带钉住的两个事实：
 
 - **vite 进程必须重启才吃新的 `.env`**。第一次跑真机探针时所有请求都打到 `:8002` 的假 LLM 上（那个进程还在回 `no route POST /api/auth/register`），因为 :5176 是在改 `VITE_API_BASE_URL` 之前起的。取"接口返回什么"的结论前先核对进程启动时间晚于 `.env` 的修改时间，与已知坑 7 是同一类。
-- **dev 下新账号首挂载会建两条会话**：`StrictMode` 把 `Sidebar` 的挂载副作用跑两遍，两遍都在 `sessions.length === 0` 上通过 → 各建一条。`main` 上同一段代码逐字一致（`git show main:...Sidebar.tsx`），所以这是既有的开发期现象，不是本轮引入；生产构建只挂一次。探针里对这一条只断"至少建出自己的会话"，条数断言改成相对增量。
+- **dev 下新账号首挂载会建两条会话（已修）**：`StrictMode` 把 `Sidebar` 的挂载副作用跑两遍，而 `initFirstSession` 的"无会话才建"是 check-then-act、并发下不幂等，于是两遍各建一条。实测口径是数请求不是数 DOM（`node_modules/.scratch/cdp-double-session-probe.mjs` 用 CDP `Network.requestWillBeSent` 统计 `POST /api/sessions`）：改前 dev **2 次、间隔 21 ms**，同一份代码的**生产构建 1 次**（React 只在 dev 双跑 effect，所以线上从来没出现过这条 bug，也无法用线上复现）；给挂载 effect 加 `cancelled` 取消标记后 dev 也是 1 次。探针里 A、B 两条数量断言已从 `>= 1` 收回 `=== 1`，作为这个标记的守卫。
 
 仍未覆盖（别当已验证）：语音 WS 的真机链路（无头环境没有麦克风，只做了单测层与关闭码翻译）、打开 `SPEND_DAILY_LIMIT` 之后的前端表现（闸门默认关着）、以及任何真实模型调用。
 
