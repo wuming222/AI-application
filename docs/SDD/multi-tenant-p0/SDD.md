@@ -68,14 +68,16 @@
 |---|---|---|
 | 服务端契约 | `python node_modules/.scratch/auth_check.py` | **ALL PASS（78 项）**，9 组；限额那一组用子进程带 `SPEND_DAILY_LIMIT=2` 复跑，形如 `[502,502,429,429]` 且别的账号不受牵连 |
 | 前端单测 | `pnpm --filter web test:run` | **130 passed（16 文件）**，本轮新增 `authStore.test.ts`(11) + `resetAccountState.test.ts`(3) |
-| 类型与产物 | `pnpm build` / `pnpm --filter web lint` | tsc 干净通过；只剩主 chunk 体积提示；oxlint 1 条告警是 `Sidebar.tsx:155` 的既有 exhaustive-deps |
-| 真机端到端 | `node node_modules/.scratch/cdp-auth-p0-probe.mjs` | **ALL PASS（21 项）**，无头 Chrome → vite:5176 → 真实 FastAPI:8000（`APP_DB_PATH` 指临时库），零模型 token |
+| 类型与产物 | `pnpm build` / `pnpm --filter web lint` | tsc 干净通过；只剩主 chunk 体积提示；oxlint 1 条告警是 `Sidebar.tsx:163` 的既有 exhaustive-deps |
+| 真机端到端 | `node node_modules/.scratch/cdp-auth-p0-probe.mjs` | **ALL PASS（22 项）**，无头 Chrome → vite:5176 → 真实 FastAPI:8000（`APP_DB_PATH` 指临时库），零模型 token；含"头部有可见的退出登录按钮" |
+| UI 目视 | `node node_modules/.scratch/cdp-header-shot.mjs` | 注册新账号后只截头部那条，产出 `node_modules/.scratch/header-shot.png`：标题靠左、用户名标签 + 带图标的"退出登录"按钮靠右 |
 
-实现与设计的三处偏差（都不是设计变更）：
+实现与设计的四处偏差（都不是设计变更）：
 
 1. `authStore.status` 用 `'loading' | 'signedOut' | 'signedIn'`，没照第三节写的 `anon|ready` 命名 —— 界面上要区分"还没握过手"和"确认没登录"，后者才渲染登录卡。
 2. `initFirstSession` / `loadSessions` 留在 `Sidebar` 里没上移：`Sidebar` 已经只在登录后挂载，效果与计划一致。
 3. 登出清态写在 `store/resetAccountState.ts` 并由 `App.tsx` 按 `status==='signedOut'` 触发，没挂进 `authStore.signOut` —— 那边会形成 `authStore → chatStore → api/sessions → authStore` 的导入环。
+4. 退出入口：第一版把登出做成"用户名本身是一颗 `type="text"` 的 Button"，看着就是个标签，等于没有入口。现在用户名退回纯文本标签，右侧独立一颗带 `LogoutOutlined` 的"退出登录"`Button`（`Workbench.tsx:75` 的 `.app-chat-account` 一组），Tooltip 说明"只清本地已加载数据、服务端记录不受影响"。探针新增一条断言守这颗按钮可见。
 
 实测顺带钉住的两个事实：
 

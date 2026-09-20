@@ -38,8 +38,15 @@
   min-width: 0;
 }
 
-.app-chat-user {
+/* 头部右侧那一组：用户名只是标签，能点的是旁边那颗退出按钮 */
+.app-chat-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   flex-shrink: 0;
+}
+
+.app-chat-user {
   font-weight: 400;
   color: var(--app-text-secondary);
 }

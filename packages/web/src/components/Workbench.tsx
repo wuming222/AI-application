@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Button, Tooltip } from 'antd'
+import { LogoutOutlined } from '@ant-design/icons'
 import { ChatInterface } from './ChatInterface'
 import { MessageList } from './MessageList'
 import { PreviewArea } from './PreviewArea'
@@ -74,11 +75,14 @@ export function Workbench() {
         <div className="app-chat" style={{ width: chatWidth ?? undefined, flex: chatWidth === null ? 1 : undefined }}>
           <header className="app-chat-header">
             <span className="app-chat-title">{headerTitle}</span>
-            <Tooltip title="退出登录会清空本地已加载的会话数据，服务端记录不受影响">
-              <Button size="small" type="text" className="app-chat-user" onClick={signOut}>
-                {username ?? '未登录'}
-              </Button>
-            </Tooltip>
+            <span className="app-chat-account">
+              <span className="app-chat-user">{username ?? '未登录'}</span>
+              <Tooltip title="退出登录会清空本地已加载的会话数据，服务端记录不受影响">
+                <Button size="small" icon={<LogoutOutlined />} className="app-chat-signout" onClick={signOut}>
+                  退出登录
+                </Button>
+              </Tooltip>
+            </span>
           </header>
           <MessageList />
           <ChatInterface />
