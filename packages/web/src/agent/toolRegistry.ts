@@ -1,12 +1,13 @@
 import type { ToolDefinition } from '../llm/types'
-import type { ToolContext } from './types'
+import type { CapabilityKind, ToolContext, ToolDurability, ToolEffect } from './types'
 import { useWorkspaceStore } from '../store/workspaceStore'
 
 const READ_FILE_MAX_CHARS = 8000
 
 export interface ToolResult {
   text: string
-  // 外部工具（MCP）的成败在 JSON-RPC 的 isError 上，HTTP 恒 200，所以要把这个位带到进度渲染层
+  // 能力工具的成败在协议层（MCP 的 JSON-RPC isError / skill 的取正文失败），HTTP 恒 200，
+  // 所以要把这个位带到进度渲染层
   isError?: boolean
 }
 
@@ -17,8 +18,14 @@ export interface ToolExecutor {
 interface RegisteredTool {
   definition: ToolDefinition
   executor: ToolExecutor
-  // 有 mcpService 即外部工具：受逐 server 开关约束；无即内置 fs 工具，恒在
-  meta?: { mcpService?: string }
+  // 带 sourceId 即能力工具（MCP / skill），受该 source 的开关约束；无 meta 即内置 fs 工具，恒在。
+  // durability / effect 是给上下文预算层与调用方读的语义，不参与"发不发给模型"的筛选。
+  meta?: {
+    provider: CapabilityKind
+    sourceId: string
+    durability?: ToolDurability
+    effect?: ToolEffect
+  }
 }
 
 class ToolRegistry {
@@ -33,13 +40,13 @@ class ToolRegistry {
   }
 
   /**
-   * 按启用的外部 server 过滤**发给模型的 definitions 副本**。
+   * 按启用的 source 过滤**发给模型的 definitions 副本**。
    * 注册表本身仍是进程级、一次性注册 —— 这里只筛不发，绝不 unregister，
    * 否则就等于把"这一轮的筛选结果"写进全局单例，后台并行的另一路会被污染。
    */
-  getDefinitionsFor(enabledMcpServices: Set<string>): ToolDefinition[] {
+  getDefinitionsFor(enabledSourceIds: Set<string>): ToolDefinition[] {
     return Array.from(this.tools.values())
-      .filter((t) => !t.meta?.mcpService || enabledMcpServices.has(t.meta.mcpService))
+      .filter((t) => !t.meta || enabledSourceIds.has(t.meta.sourceId))
       .map((t) => t.definition)
   }
 

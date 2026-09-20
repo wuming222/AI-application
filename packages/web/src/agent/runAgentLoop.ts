@@ -4,11 +4,17 @@ import { registry } from './toolRegistry'
 import { truncateMessages, resolveLimits } from './contextBudget'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { mergeToolCalls } from './toolProgress'
-import { externalToolsReady, getEnabledServiceIds } from './externalTools'
+import { mcpCapabilitiesReady } from './providers/mcp'
+// 这条 import 不能删：providers/skills 在模块初始化时就静态注册了 source 'skills'
+// 与 skill_search / skill_load / skill_file 三个工具（它们不等任何异步清单，所以不占下面那场 race）。
+import { buildSkillIndexSection } from './providers/skills'
+import { getEnabledSourceIds } from './capabilityStore'
 import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
 const DEFAULT_MAX_ROUNDS = 20
-const EXTERNAL_TOOLS_WAIT_MS = 2000
+// 只有 MCP 需要等：它的清单要等服务端逐 server 握手回来才有。skill 侧的工具定义是静态注册的、
+// 不等任何清单，把 skill 拉进这场 race 只会白白拖慢每轮的第一次请求。
+const MCP_HANDSHAKE_WAIT_MS = 2000
 
 const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想要什么应用，你帮他生成出来。
 
@@ -22,13 +28,13 @@ const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想�
 2. 不使用 fetch 或动态 import。
 3. 修改已有文件时，优先使用 edit_file 进行局部替换。仅在需要大幅重写时才用 write_file。修改前先 read_file 查看当前内容。`
 
-function buildSystemPrompt(files: Record<string, string>): string {
+function buildSystemPrompt(files: Record<string, string>, skillIndex = ''): string {
   const listing = Object.keys(files)
     .sort()
     .map((p) => `- ${p} (${files[p].length} 字符)`)
     .join('\n')
   const section = listing ? `\n\n当前工作区文件：\n${listing}` : '\n\n当前工作区为空。'
-  return SYSTEM_PROMPT + section
+  return SYSTEM_PROMPT + section + skillIndex
 }
 
 export async function runAgentLoop(
@@ -47,16 +53,16 @@ export async function runAgentLoop(
     messages[0]?.role === 'system'
       ? [...messages]
       : [{ role: 'system', content: SYSTEM_PROMPT }, ...messages]
-  // 外部工具清单是异步来的（App 挂载时就发起）。这里最多等 2s：等不到就当本轮没有外部工具。
+  // MCP 清单是异步来的（App 挂载时就发起，服务端要逐 server 握手）。这里最多等 2s：等不到就当本轮没有 MCP 工具。
   // 关键是把 definitions 定在循环开始处一次，不在 20 个 round 之间重算。
   let waitTimer: ReturnType<typeof setTimeout> | undefined
   await Promise.race([
-    externalToolsReady(),
+    mcpCapabilitiesReady(),
     new Promise((resolve) => {
-      waitTimer = setTimeout(resolve, EXTERNAL_TOOLS_WAIT_MS)
+      waitTimer = setTimeout(resolve, MCP_HANDSHAKE_WAIT_MS)
     }),
   ]).finally(() => clearTimeout(waitTimer))
-  const toolDefs = registry.getDefinitionsFor(getEnabledServiceIds())
+  const toolDefs = registry.getDefinitionsFor(getEnabledSourceIds())
   const limits = resolveLimits()
 
   for (let round = 1; round <= maxRounds; round++) {
@@ -71,9 +77,12 @@ export async function runAgentLoop(
       let toolCalls: ToolCall[] | undefined
 
       // 每轮组装：system 注入最新文件清单 + 历史按两阶段截断（只影响 LLM payload，不改 store）
+      // 索引段同样每轮重算 —— definitions 定在循环开始处是纪律，但目录是异步来的，
+      // 锁在开始处会让"生成中途目录才回来"这一轮彻底看不到技能。
       if (allMessages[0]?.role === 'system') {
         allMessages[0].content = buildSystemPrompt(
           useWorkspaceStore.getState().filesFor(toolCtx.sessionId),
+          buildSkillIndexSection(),
         )
       }
       const payload = truncateMessages(allMessages, limits)

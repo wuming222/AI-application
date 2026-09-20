@@ -18,8 +18,8 @@ describe('getDefinitionsFor', () => {
   })
 
   it('只发启用中的外部 server 的定义', () => {
-    registry.register(def('mcp__amap-maps__maps_geo'), { execute: () => 'geo' }, { mcpService: 'amap-maps' })
-    registry.register(def('mcp__antv__generate'), { execute: () => 'chart' }, { mcpService: 'antv' })
+    registry.register(def('mcp__amap-maps__maps_geo'), { execute: () => 'geo' }, { provider: 'mcp', sourceId: 'amap-maps' })
+    registry.register(def('mcp__antv__generate'), { execute: () => 'chart' }, { provider: 'mcp', sourceId: 'antv' })
 
     const onAmap = registry.getDefinitionsFor(new Set(['amap-maps'])).map((d) => d.name)
     expect(onAmap).toContain('mcp__amap-maps__maps_geo')
@@ -30,7 +30,7 @@ describe('getDefinitionsFor', () => {
   })
 
   it('筛选只作用于发出去的副本，注册表本身不被 unregister', () => {
-    registry.register(def('mcp__keep__tool'), { execute: () => 'kept' }, { mcpService: 'keep' })
+    registry.register(def('mcp__keep__tool'), { execute: () => 'kept' }, { provider: 'mcp', sourceId: 'keep' })
 
     registry.getDefinitionsFor(new Set())
 
@@ -38,7 +38,7 @@ describe('getDefinitionsFor', () => {
   })
 
   it('另一路生成筛掉的服务，不影响本路仍然能执行已注册的执行器', () => {
-    registry.register(def('mcp__shared__tool'), { execute: () => 'ran' }, { mcpService: 'shared' })
+    registry.register(def('mcp__shared__tool'), { execute: () => 'ran' }, { provider: 'mcp', sourceId: 'shared' })
 
     registry.getDefinitionsFor(new Set())
 

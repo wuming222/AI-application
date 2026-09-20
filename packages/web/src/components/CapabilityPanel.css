@@ -1,0 +1,35 @@
+/* 能力开关面板（Popover 内容）：只放外部工具的"标签 + 小开关"行，技能那一家在 SkillPanel.css。
+   尺度取 tokens.css，颜色取 --app-*。
+   只保留固有尺寸：面板 min-width 180px（一行"标签 + 小开关"的下限，与 Sidebar 的列表宽同类） */
+
+.capability-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 180px;
+}
+
+.capability-panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.capability-panel-title {
+  font-size: var(--font-xs);
+  color: var(--app-text-tertiary);
+}
+
+.capability-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--font-sm);
+  color: var(--app-text-secondary);
+}
+
+.capability-panel-empty {
+  font-size: var(--font-sm);
+  color: var(--app-text-tertiary);
+}

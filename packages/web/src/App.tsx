@@ -5,7 +5,8 @@ import { MessageList } from './components/MessageList'
 import { PreviewArea } from './components/PreviewArea'
 import { Sidebar } from './components/Sidebar'
 import { useSessionStore } from './store/sessionStore'
-import { loadExternalTools } from './agent/externalTools'
+import { loadMcpCapabilities } from './agent/providers/mcp'
+import { loadSkillCatalog } from './agent/providers/skills'
 import './App.css'
 
 /**
@@ -47,10 +48,14 @@ export default function App() {
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const headerTitle = currentSession?.title || 'AI App Generator'
 
-  // 外部工具清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
+  // MCP 清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
   // 它是全局偏好，不是会话状态，所以不进任何 store 分片。
+  // 技能目录现在两家来源：内置（零成本）+ 百炼（一次列表 ~0.6s，缓存 10 分钟）。
+  // 一个技能都没开着时不预热已经不再成立 —— 用户需要看到有哪些技能可选，
+  // 所以改成无条件拉一次。
   useEffect(() => {
-    loadExternalTools()
+    loadMcpCapabilities()
+    void loadSkillCatalog()
   }, [])
 
   const onMouseDown = useCallback(() => {

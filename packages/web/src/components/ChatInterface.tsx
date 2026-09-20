@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { Input, Button, Popover, Tooltip, message as antdMessage } from 'antd'
-import { ApiOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons'
+import { ApiOutlined, BookOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons'
 import './ChatInterface.css'
 import { useChatStore } from '../store/chatStore'
 import { useSessionStore } from '../store/sessionStore'
 import { compressImage, MAX_IMAGES } from '../utils/compressImage'
 import { useVoiceInput } from '../hooks/useVoiceInput'
-import { McpServersPanel } from './McpServersPanel'
+import { CapabilityPanel } from './CapabilityPanel'
+import { SkillPanel } from './SkillPanel'
 
 const { TextArea } = Input
 
@@ -127,9 +128,14 @@ export function ChatInterface() {
               onClick={() => fileRef.current?.click()}
               icon={<PaperClipOutlined />}
             />
-            <Popover trigger="click" placement="topLeft" content={<McpServersPanel />}>
-              <Tooltip title="外部工具">
-                <Button type="text" className="mcp-btn" icon={<ApiOutlined />} />
+            <Popover trigger="click" placement="topLeft" content={<CapabilityPanel />}>
+              <Tooltip title="外部工具（MCP）">
+                <Button type="text" className="capability-btn" icon={<ApiOutlined />} />
+              </Tooltip>
+            </Popover>
+            <Popover trigger="click" placement="topLeft" content={<SkillPanel />}>
+              <Tooltip title="技能（只生成不执行）">
+                <Button type="text" className="skill-btn" icon={<BookOutlined />} />
               </Tooltip>
             </Popover>
           </div>
