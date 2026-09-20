@@ -21,9 +21,36 @@
 }
 
 .app-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--app-border-secondary);
   font-weight: 600;
+}
+
+/* 会话标题可以是任意长度，超长时省略而不是把右边的用户名挤出可视区 */
+.app-chat-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.app-chat-user {
+  flex-shrink: 0;
+  font-weight: 400;
+  color: var(--app-text-secondary);
+}
+
+/* 启动时用本地 token 换身份的那一小段，只有转圈 */
+.app-boot {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-bg-layout);
 }
 
 /* 聊天列与预览列之间的拖拽分隔条（5px 是把手宽度，属固有尺寸） */

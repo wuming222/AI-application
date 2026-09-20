@@ -1,12 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { theme } from 'antd'
-import { ChatInterface } from './components/ChatInterface'
-import { MessageList } from './components/MessageList'
-import { PreviewArea } from './components/PreviewArea'
-import { Sidebar } from './components/Sidebar'
-import { useSessionStore } from './store/sessionStore'
-import { loadMcpCapabilities } from './agent/providers/mcp'
-import { loadSkillCatalog } from './agent/providers/skills'
+import { useEffect } from 'react'
+import { theme, Spin } from 'antd'
+import { Workbench } from './components/Workbench'
+import { AuthGate } from './components/AuthGate'
+import { useAuthStore } from './store/authStore'
+import { bootstrapAuth } from './api/auth'
+import { resetAccountState } from './store/resetAccountState'
 import './App.css'
 
 /**
@@ -38,70 +36,30 @@ function useThemeVars(): React.CSSProperties {
 }
 
 export default function App() {
-  const [chatWidth, setChatWidth] = useState<number | null>(null)
-  const dragging = useRef(false)
-  const containerRef = useRef<HTMLDivElement>(null)
   const themeVars = useThemeVars()
-  const { sessions, currentSessionId } = useSessionStore()
-
-  // 获取当前会话标题
-  const currentSession = sessions.find(s => s.id === currentSessionId)
-  const headerTitle = currentSession?.title || 'AI App Generator'
-
-  // MCP 清单与界面无关，一挂载就发起（幂等），这样第一次生成不用等它。
-  // 它是全局偏好，不是会话状态，所以不进任何 store 分片。
-  // 技能目录现在两家来源：内置（零成本）+ 百炼（一次列表 ~0.6s，缓存 10 分钟）。
-  // 一个技能都没开着时不预热已经不再成立 —— 用户需要看到有哪些技能可选，
-  // 所以改成无条件拉一次。
-  useEffect(() => {
-    loadMcpCapabilities()
-    void loadSkillCatalog()
-  }, [])
-
-  const onMouseDown = useCallback(() => {
-    dragging.current = true
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [])
+  const status = useAuthStore((s) => s.status)
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragging.current || !containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const min = 320
-      const max = rect.width - 320
-      setChatWidth(Math.max(min, Math.min(max, x)))
-    }
-    const onMouseUp = () => {
-      if (dragging.current) {
-        dragging.current = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
+    void bootstrapAuth()
   }, [])
+
+  // 换账号时清掉"上一个人的会话数据"。放在这里而不是 authStore.signOut 里：
+  // authStore 若直接 import 那三个 store 会形成 authStore → chatStore → api/sessions → authStore 的环。
+  useEffect(() => {
+    if (status === 'signedOut') resetAccountState()
+  }, [status])
 
   return (
     <div className="app-shell" style={themeVars}>
-      <Sidebar />
-      <div ref={containerRef} className="app-main">
-        <div className="app-chat" style={{ width: chatWidth ?? undefined, flex: chatWidth === null ? 1 : undefined }}>
-          <header className="app-chat-header">{headerTitle}</header>
-          <MessageList />
-          <ChatInterface />
+      {status === 'signedIn' ? (
+        <Workbench />
+      ) : status === 'loading' ? (
+        <div className="app-boot">
+          <Spin />
         </div>
-        <div className="chat-splitter" onMouseDown={onMouseDown} />
-        <div className="app-preview">
-          <PreviewArea />
-        </div>
-      </div>
+      ) : (
+        <AuthGate />
+      )}
     </div>
   )
 }

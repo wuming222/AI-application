@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { message as antdMessage } from 'antd'
 import workletUrl from './voice-processor.js?url'
+import { voiceWsUrl } from '../api/auth'
 
 type VoiceState = 'idle' | 'connecting' | 'recording' | 'stopping'
 
@@ -56,6 +58,7 @@ export function useVoiceInput(): UseVoiceInputReturn {
   const nodeRef = useRef<AudioWorkletNode | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const committedRef = useRef('')
+  const openedRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cleanup = useCallback(() => {
@@ -94,13 +97,13 @@ export function useVoiceInput(): UseVoiceInputReturn {
     setState('connecting')
     setTranscript('')
     committedRef.current = ''
+    openedRef.current = false
 
-    const base = import.meta.env.VITE_API_BASE_URL || ''
-    const wsUrl = base.replace(/^http/, 'ws') + '/api/voice/ws'
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(voiceWsUrl())
     wsRef.current = ws
 
     ws.onopen = async () => {
+      openedRef.current = true
       ws.send(JSON.stringify({
         event_id: `event_${Date.now()}`,
         type: 'session.update',
@@ -179,7 +182,12 @@ export function useVoiceInput(): UseVoiceInputReturn {
     }
 
     ws.onclose = (event) => {
-      if (event.code !== 1000) {
+      if (event.code === 4429) {
+        antdMessage.warning('今天的生成次数用完了，明天再来')
+      } else if (!openedRef.current) {
+        // 握手就被拒：token 缺失或已失效（服务端在 accept 前就 close，拿不到关闭码）
+        antdMessage.warning('语音服务连不上，登录可能已过期，刷新页面重新登录')
+      } else if (event.code !== 1000) {
         console.warn('voice ws closed:', event.code, event.reason)
       }
       cleanup()

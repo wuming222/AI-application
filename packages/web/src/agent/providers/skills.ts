@@ -2,6 +2,7 @@ import type { CapabilitySourceInfo } from '../types'
 import { registry } from '../toolRegistry'
 import type { ToolResult } from '../toolRegistry'
 import { applyProviderSources, forgetSourceOverride, isSourceEnabled, peekSourceOverride } from '../capabilityStore'
+import { authFetch } from '../../api/auth'
 
 /**
  * skill provider：把技能（内置 + 百炼）接成一个能力来源，与 MCP 并列。
@@ -142,7 +143,7 @@ export function setSkillEnabled(name: string, on: boolean): void {
 }
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
-  const res = await fetch(`${BASE}${path}`, { signal: signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+  const res = await authFetch(`${BASE}${path}`, { signal: signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return await res.json()
 }
