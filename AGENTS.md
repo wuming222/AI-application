@@ -4,9 +4,9 @@
 
 ## 项目是什么
 
-浏览器内 AI 应用生成平台：用户用自然语言描述需求，Agent 主循环在内存虚拟文件系统里生成前端代码，右侧 iframe 实时预览，支持多轮迭代修改。附带多会话管理、语音输入、Markdown 渲染。
+浏览器内 AI 应用生成平台：用户用自然语言描述需求，Agent 主循环在内存虚拟文件系统里生成前端代码，右侧 iframe 实时预览，支持多轮迭代修改。附带多会话管理、语音输入、Markdown 渲染、MCP 与技能两条能力通道、多用户注册登录（会话按账号隔离）。
 
-**注意**：`README.md` 内容已陈旧（仍写着 React 18、"不做语音/多会话/持久化"，这些实际都已实现）。以代码和本文件为准，不要据 README 判断项目现状。
+**两份文档分工**：`README.md` 是面向使用者的入门（功能清单、快速开始、已知限制），`AGENTS.md`（本文件）是工程约定。两者都不如代码权威 —— 冲突时以代码为准，但 README 已同步到当前实现，不再描述 MVP 阶段的旧范围。
 
 ## 常用命令
 
@@ -129,7 +129,7 @@ LLM 请求有两条通路，取决于 `packages/web/.env` 里的 `VITE_API_BASE_
 
 ## 已知坑
 
-1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 965 kB / gzip 314 kB（antd + highlight.js；MCP 开关面板与技能开关面板之后），未做代码分割。**验证优先用 `pnpm --filter web test:run`（130 用例），build 绿不代表交互没问题。**
+1. **`pnpm build` 已可用**：`tsc -b` 干净通过（此前的 4 个历史类型错误在会话状态隔离那次一并清掉了）。只剩一条提示：主 chunk 1,016 kB / gzip 331 kB（antd + highlight.js；MCP 开关面板、技能开关面板与登录层之后），未做代码分割。**验证优先用 `pnpm --filter web test:run`（130 用例），build 绿不代表交互没问题。**
 2. **ASR 协议不通用**：语音走 DashScope 原生 WS 协议（`voice.py:16` 的 `wss://dashscope.aliyuncs.com/api-ws/v1/inference` + run-task 握手），模型 `qwen-audio-3.0-asr-flash-streaming`，不能按 OpenAI realtime 协议改。
 3. **Responses 协议下 `input_image.image_url` 传的是字符串**（见 `responses.ts:24`），不是 `{ url }` 对象，改多模态时别按 OpenAI 文档的形状写。
 4. **预览 iframe 的 `sandbox="allow-scripts"`（`PreviewArea.tsx:91`）刻意不带 `allow-same-origin`**：iframe 因而是不透明源，AI 生成的应用访问 `localStorage` 会抛 SecurityError，由 `buildSrcdoc.ts` 注入的内存 shim 兜住。不要为了排查问题给 sandbox 加权限，也别删这个 shim。副作用是父页面读不到 iframe 内部，要收运行时错误只能靠注入脚本 `postMessage` 回传（见 `docs/SDD/preview-error-capture/SDD.md`）。
