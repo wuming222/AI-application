@@ -66,7 +66,7 @@
 
 | 项 | 命令 | 结果 |
 |---|---|---|
-| 服务端契约 | `python node_modules/.scratch/auth_check.py` | **ALL PASS（78 项）**，9 组；限额那一组用子进程带 `SPEND_DAILY_LIMIT=2` 复跑，形如 `[502,502,429,429]` 且别的账号不受牵连 |
+| 服务端契约 | `python node_modules/.scratch/auth_check.py` | **ALL PASS（82 项）**，9 组；限额那一组用子进程带 `SPEND_DAILY_LIMIT=2` 复跑，形如 `[502,502,429,429]` 且别的账号不受牵连。后 4 条是照 P0-B 验收表补的：连续 3 轮单调累加、跨天整盘归零（翻 `_today` 之后必须再记一笔才看得出区别）、`mcp_call` 留记录且不占轮数 |
 | 前端单测 | `pnpm --filter web test:run` | **130 passed（16 文件）**，本轮新增 `authStore.test.ts`(11) + `resetAccountState.test.ts`(3) |
 | 类型与产物 | `pnpm build` / `pnpm --filter web lint` | tsc 干净通过；只剩主 chunk 体积提示；oxlint 1 条告警是 `Sidebar.tsx:163` 的既有 exhaustive-deps |
 | 真机端到端 | `node node_modules/.scratch/cdp-auth-p0-probe.mjs` | **ALL PASS（22 项）**，无头 Chrome → vite:5176 → 真实 FastAPI:8000（`APP_DB_PATH` 指临时库），零模型 token；含"头部有可见的退出登录按钮" |
