@@ -59,8 +59,30 @@
 ### 五、验证
 
 1. 服务端脚本 `node_modules/.scratch/auth_check.py`（`APP_DB_PATH` 指临时库 + `httpx.ASGITransport`，不占端口、不碰 `--reload` 进程）：断言 ① 未登录全端点 401；② A 建的会话在 B 的列表里没有；③ B 拿 A 的 uuid 打 `/messages` 与 `/workspace` 都得 **404 而不是空对象**；④ 登录两支响应体逐字节相同；⑤ 改密后旧 token 立即失效；⑥ `user_id` 为 NULL 的存量行任何账号都读不到；⑦ `SPEND_DAILY_LIMIT` 开与关各自的形态；⑧ 密码串能解析且 verify 拒绝畸形串。
-2. 前端 vitest：`authStore` 的 try/catch 与状态机、`authFetch` 加头/合并头/401 清理、登出清分片。跑 `pnpm --filter web test:run`（基线 127 用例）与 `pnpm build`。
+2. 前端 vitest：`authStore` 的 try/catch 与状态机、`authFetch` 加头/合并头/401 清理、登出清分片。跑 `pnpm --filter web test:run`（基线 116 用例，本轮 +14 = 130）与 `pnpm build`。
 3. 手工在浏览器验一次两个账号互不可见（UI 没有自动化覆盖）。
+
+### 六、验证结果（2026-09-20 实跑）
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 服务端契约 | `python node_modules/.scratch/auth_check.py` | **ALL PASS（78 项）**，9 组；限额那一组用子进程带 `SPEND_DAILY_LIMIT=2` 复跑，形如 `[502,502,429,429]` 且别的账号不受牵连 |
+| 前端单测 | `pnpm --filter web test:run` | **130 passed（16 文件）**，本轮新增 `authStore.test.ts`(11) + `resetAccountState.test.ts`(3) |
+| 类型与产物 | `pnpm build` / `pnpm --filter web lint` | tsc 干净通过；只剩主 chunk 体积提示；oxlint 1 条告警是 `Sidebar.tsx:155` 的既有 exhaustive-deps |
+| 真机端到端 | `node node_modules/.scratch/cdp-auth-p0-probe.mjs` | **ALL PASS（21 项）**，无头 Chrome → vite:5176 → 真实 FastAPI:8000（`APP_DB_PATH` 指临时库），零模型 token |
+
+实现与设计的三处偏差（都不是设计变更）：
+
+1. `authStore.status` 用 `'loading' | 'signedOut' | 'signedIn'`，没照第三节写的 `anon|ready` 命名 —— 界面上要区分"还没握过手"和"确认没登录"，后者才渲染登录卡。
+2. `initFirstSession` / `loadSessions` 留在 `Sidebar` 里没上移：`Sidebar` 已经只在登录后挂载，效果与计划一致。
+3. 登出清态写在 `store/resetAccountState.ts` 并由 `App.tsx` 按 `status==='signedOut'` 触发，没挂进 `authStore.signOut` —— 那边会形成 `authStore → chatStore → api/sessions → authStore` 的导入环。
+
+实测顺带钉住的两个事实：
+
+- **vite 进程必须重启才吃新的 `.env`**。第一次跑真机探针时所有请求都打到 `:8002` 的假 LLM 上（那个进程还在回 `no route POST /api/auth/register`），因为 :5176 是在改 `VITE_API_BASE_URL` 之前起的。取"接口返回什么"的结论前先核对进程启动时间晚于 `.env` 的修改时间，与已知坑 7 是同一类。
+- **dev 下新账号首挂载会建两条会话**：`StrictMode` 把 `Sidebar` 的挂载副作用跑两遍，两遍都在 `sessions.length === 0` 上通过 → 各建一条。`main` 上同一段代码逐字一致（`git show main:...Sidebar.tsx`），所以这是既有的开发期现象，不是本轮引入；生产构建只挂一次。探针里对这一条只断"至少建出自己的会话"，条数断言改成相对增量。
+
+仍未覆盖（别当已验证）：语音 WS 的真机链路（无头环境没有麦克风，只做了单测层与关闭码翻译）、打开 `SPEND_DAILY_LIMIT` 之后的前端表现（闸门默认关着）、以及任何真实模型调用。
 
 ## 不在这一轮
 
