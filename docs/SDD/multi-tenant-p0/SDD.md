@@ -84,6 +84,8 @@
 - **vite 进程必须重启才吃新的 `.env`**。第一次跑真机探针时所有请求都打到 `:8002` 的假 LLM 上（那个进程还在回 `no route POST /api/auth/register`），因为 :5176 是在改 `VITE_API_BASE_URL` 之前起的。取"接口返回什么"的结论前先核对进程启动时间晚于 `.env` 的修改时间，与已知坑 7 是同一类。
 - **dev 下新账号首挂载会建两条会话（已修）**：`StrictMode` 把 `Sidebar` 的挂载副作用跑两遍，而 `initFirstSession` 的"无会话才建"是 check-then-act、并发下不幂等，于是两遍各建一条。实测口径是数请求不是数 DOM（`node_modules/.scratch/cdp-double-session-probe.mjs` 用 CDP `Network.requestWillBeSent` 统计 `POST /api/sessions`）：改前 dev **2 次、间隔 21 ms**，同一份代码的**生产构建 1 次**（React 只在 dev 双跑 effect，所以线上从来没出现过这条 bug，也无法用线上复现）；给挂载 effect 加 `cancelled` 取消标记后 dev 也是 1 次。探针里 A、B 两条数量断言已从 `>= 1` 收回 `=== 1`，作为这个标记的守卫。
 
+一处按需的例外（数据，不是代码）：`data/app.db` 里那 10 条 `user_id IS NULL` 的存量会话，已按用户明确要求一次性归到账号 `001` 名下（脚本 `node_modules/.scratch/merge-001-into-app-db.py`，跑前先备份为 `data/app-backup-20260920-1438.db`）。这是对第 4 节"存量行谁都不属于"的一次**按需让步**，只用在他自己的本地单用户库上；`database.py:68` 的注释与代码规则原样保留，真实多用户部署仍然不许回填。顺带钉出一个坑：`001` 这个账号注册在 `:8000` 当时 `APP_DB_PATH` 指向的临时库（`node_modules/.scratch/p0-browser-check.db`）里，与 `data/app.db` 是两个文件 —— 所以"把记录归到某账号下"的第一步永远是先问清**目标是哪一份库**，否则任何 `UPDATE` 都跨不过去。合并后 :8000 已改回默认库，`/api/sessions` 实测 11 条会话、120 条消息、工作区可读。
+
 仍未覆盖（别当已验证）：语音 WS 的真机链路（无头环境没有麦克风，只做了单测层与关闭码翻译）、打开 `SPEND_DAILY_LIMIT` 之后的前端表现（闸门默认关着）、以及任何真实模型调用。
 
 ## 不在这一轮
