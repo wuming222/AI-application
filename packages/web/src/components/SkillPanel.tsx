@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useState } from 'react'
 import { Button, Input, Switch, Tooltip } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
 import {
   GENERATE_ONLY_NOTICE,
   SKILL_ORIGIN_TAGS,
@@ -111,9 +112,9 @@ export function SkillPanel() {
         })}
       </div>
       <div className="skill-panel-actions">
-        <Button size="small" type="text" loading={searching} onClick={() => void loadSkillCatalog(true)}>
-          刷新目录
-        </Button>
+        <Tooltip title="刷新目录" placement="top">
+          <Button size="small" type="text" icon={<ReloadOutlined />} loading={searching} onClick={() => void loadSkillCatalog(true)} />
+        </Tooltip>
         {catalog.errors.length > 0 && (
           <Tooltip title={catalog.errors.join('；')} placement="left">
             <span className="skill-panel-error">目录有 {catalog.errors.length} 处异常</span>

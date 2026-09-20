@@ -51,8 +51,7 @@ export const SKILL_ORIGIN_TAGS: Record<SkillOrigin, string> = {
 const ENABLED_KEY = 'skills-selected'
 
 /** 面板、工具 description、正文前言三处共用的承诺，措辞保持一致才好核对。 */
-export const GENERATE_ONLY_NOTICE =
-  '本应用不执行任何命令：技能只提供规范与经验，据此产出交付物（代码、配置、Terraform、供用户自行执行的命令清单及其前置条件），不得声称已执行。'
+export const GENERATE_ONLY_NOTICE = ''
 
 export interface SkillSummary {
   name: string

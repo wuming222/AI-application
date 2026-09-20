@@ -71,11 +71,11 @@ describe('静态注册', () => {
     expect(registry.getDefinitionsFor(store.getEnabledSourceIds()).map((d) => d.name)).toContain('skill_load')
   })
 
-  it('三个工具的 description 都写了"不执行任何命令"，约束在模型做选择那一刻就到位', async () => {
+  it('三个工具的 description 都不带"不执行任何命令"的承诺', async () => {
     const { registry } = await loadSkills(() => Promise.resolve(CATALOG_PAYLOAD))
     const defs = registry.getDefinitions()
     for (const name of ['skill_search', 'skill_load', 'skill_file']) {
-      expect(defs.find((d) => d.name === name)?.description).toContain('本应用不执行任何命令')
+      expect(defs.find((d) => d.name === name)?.description).not.toContain('本应用不执行任何命令')
     }
   })
 })
@@ -95,7 +95,7 @@ describe('常驻索引段（K3）', () => {
     const text = skills.buildSkillIndexSection()
     expect(text).toContain(`- [百炼] ${SKILL}: 把本地目录同步到 OSS Bucket`)
     expect(text).toContain('- [内置] requirement-clarify: 动手前把一句话需求梳理成结构化需求')
-    expect(text).toContain('本应用不执行任何命令')
+    expect(text).not.toContain('本应用不执行任何命令')
   })
 
   it('整段永远不超过 9,000 字符，超出的部分留"另有 N 个未列入目录"提示行', async () => {
@@ -148,7 +148,7 @@ describe('三个执行器', () => {
     const res = await registry.executeDetailed('skill_load', { name: SKILL }, CTX)
 
     expect(res.isError).toBeFalsy()
-    expect(res.text.startsWith(`【技能正文 ${SKILL}】本应用不执行任何命令`)).toBe(true)
+    expect(res.text.startsWith(`【技能正文 ${SKILL}】`)).toBe(true)
     expect(res.text).toContain(body)
   })
 

@@ -96,7 +96,7 @@
 
 - `providers/skills.ts`：拉 catalog、注册 source `agent-skills`（**R1 后改名 `skills`**）、持有**勾选集**（新 key `skills-selected: string[]`，全局偏好，理由同 MCP 的开关——它不属于任何一条会话）。**R2 后这个"勾选集"就是唯一开关**：`skills-selected` 这个 key 没换，但语义从"选了哪些要注入"变成"哪些技能开着"，且它不再配一个总闸（见 R2.b）。
 - 三个工具**静态注册**（定义不依赖异步清单，所以不占 K9 那条 race）：`skill_search`、`skill_load`、`skill_file`，`meta = { provider:'skill', sourceId:'agent-skills', ... }`。`skill_load` 标 `durability:'durable'` + `effect:'instructions'`，另两个是 `transient`/`data`。
-- 三者的 `description` 里就写明"本应用不执行任何命令；技能正文里的 CLI/脚本调用要转译成写给用户的产物" —— 约束放在模型做选择的那一刻，而不是等它 load 完再补。
+- 三者的 `description` 里~~写明"本应用不执行任何命令；技能正文里的 CLI/脚本调用要转译成写给用户的产物" —— 约束放在模型做选择的那一刻，而不是等它 load 完再补。~~ **R2 后已删掉**（见 R1 的"明确未覆盖"）。
 - **常驻索引**：`buildSystemPrompt(files)` → `buildSystemPrompt(files, skillIndex)`（`runAgentLoop.ts:25`，每轮重算）。索引段 = 勾选集内 skill 的 `name: description`，**整段 ≤ 9,000 字符**（= 6,000 真 token @1.5，softLimit 的 10%，K3）；被预算挤掉的部分要留一行"另有 N 个已选技能未列入目录，用 skill_search 查找"，不允许静默消失。
 - **正文前言**：`skill_load` 返回文本头部固定拼一段"只生成不执行"的转译指令（随正文一起落库、一起被回放，见第 5 节）。
 - **截断尾巴**：正文 32,000 字符、references 单文件 16,000 字符（K4/K6），写法沿用 `mcp/client.py:334`，且**不得**写"可用 skill_file 补齐"——`skill_file` 只能取 `references/`，补不回同一份 `SKILL.md` 的后半段。
