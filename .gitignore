@@ -4,7 +4,7 @@ dist-ssr
 *.local
 
 # pnpm
-pnpm-lock.yaml is committed; only ignore local overrides
+# pnpm-lock.yaml is committed; only ignore local overrides
 .pnpm-store
 
 .env
@@ -33,3 +33,10 @@ packages/server/data/*.db-wal
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Agent tool output caches (regenerated locally, never source)
+.qoder-credits/
+
+# Staging copy + zip of the bundled skill; tracked authoritative copy is
+# packages/server/app/skills/local_skills/
+docs/skills/

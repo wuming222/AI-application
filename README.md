@@ -83,7 +83,7 @@ packages/web/            前端（Vite + React）
   src/agent/             Agent 主循环、工具注册表、能力（MCP / 技能）provider、上下文预算
   src/llm/               provider 路由与流式协议实现（含 mock）
   src/store/             zustand 分片状态：chatStore / sessionStore / workspaceStore / authStore
-  src/components/        界面：AuthGate / Workbench / Sidebar / ChatInterface / PreviewArea / 能力面板
+  src/components/        界面：AuthGate / Workbench / Sidebar / ChatInterface / MessageList / AgentProgress / PreviewArea / CapabilityPanel / SkillPanel
   src/preview/           iframe srcdoc 构建
 packages/server/         后端（FastAPI）
   app/routes/            auth / llm / sessions / mcp / skills / voice
@@ -106,6 +106,6 @@ docs/
 
 - 生产构建未做代码分割，主 chunk 约 1.0 MB / gzip 331 kB（antd + highlight.js）。
 - 所有账号共用一把上游 API key，`SPEND_DAILY_LIMIT` 默认关闭，暂无按人限流。
-- MCP server 与百炼 workspace 的配置写死在服务端，界面上不能增删。
+- MCP server 清单写死在服务端（当前两个：高德地图默认开、AntV 图表默认关），界面上只能开关、不能增删；百炼 workspace 同理走环境变量。
 - 语音识别依赖 DashScope 原生 WS 协议（复用 `LLM_API_KEY`），不是 OpenAI realtime；上游若换成非 DashScope 服务，语音那一路不通，其余功能不受影响。
 - 无 key / 断网时把 `VITE_LLM_PROVIDER` 设成 `mock`，可用内置 Mock provider 跑通完整链路。
