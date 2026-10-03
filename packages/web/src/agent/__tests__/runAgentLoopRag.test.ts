@@ -29,6 +29,8 @@ vi.mock('../../store/workspaceStore', () => ({
 }))
 
 import { runAgentLoop } from '../runAgentLoop'
+import { isSourceEnabled, setSourceEnabled } from '../capabilityStore'
+import { RAG_SOURCE_ID } from '../providers/rag'
 
 /** 第 1 轮吐一个函数调用逼出第 2 轮，第 2 轮纯文本收尾。 */
 function scriptedStream() {
@@ -128,5 +130,43 @@ describe('runAgentLoop 的历史参考注入', () => {
     expect(pA[0][0].content).not.toContain('B独有原话')
     expect(pB[0][0].content).toContain('B独有原话')
     expect(pB[0][0].content).not.toContain('A独有原话')
+  })
+
+  it('生成进行到一半翻开关：在飞这一轮的注入段不受影响', async () => {
+    // SDD 跨会话第三格的前半。ragSection 与 definitions 都在循环外读一次，所以翻开关的效果
+    // 只会落在下一次 runAgentLoop 上 —— 这条要的就是那个不对称的证据（不是复述结构）。
+    // 后半"关掉之后下一轮真的没有"在 ragProvider.test.ts 断：那里走的是真 fetchRagSection。
+    //
+    // 这里的假实现**读真开关**：否则"每轮各检索一次"这种坏法照样能过（假实现永远给段），
+    // 这条就成了不咬人的断言。
+    setSourceEnabled(RAG_SOURCE_ID, true)
+    fetchRagSection.mockImplementation(async () =>
+      isSourceEnabled(RAG_SOURCE_ID) ? '\n\n## 历史参考\n- 「佛山天气」' : '',
+    )
+    let call = 0
+    streamChat.mockImplementation(() =>
+      (async function* () {
+        call += 1
+        if (call === 1) {
+          setSourceEnabled(RAG_SOURCE_ID, false) // 就在模型吐函数调用的这一刻翻
+          yield { delta: '', done: false, tool_calls: [
+            { id: 'c1', type: 'function', function: { name: 'write_file', arguments: '{"path":"index.html"}' } },
+          ] }
+          return
+        }
+        yield { delta: '好了', done: true }
+      })(),
+    )
+
+    await runAgentLoop(
+      [{ role: 'user', content: '做个待办应用' }],
+      { sessionId: 's1', maxRounds: 5 },
+    )
+    const payloads = streamChat.mock.calls.map((c) => c[0] as Array<{ content?: string }>)
+    expect(payloads.length).toBeGreaterThanOrEqual(2)
+    for (const p of payloads) expect(p[0].content).toContain('历史参考')
+    // 检索确实只在循环外发生了一次（翻开关之后没再取）
+    expect(fetchRagSection).toHaveBeenCalledTimes(1)
+    setSourceEnabled(RAG_SOURCE_ID, true) // 别把后面的跑污染成"开关是关的"
   })
 })

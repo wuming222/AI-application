@@ -152,4 +152,23 @@ describe('fetchRagSection 的开关与降级', () => {
     expect((s.match(/不是本次需求的一部分/g) ?? []).length).toBe(1)
     expect(s).not.toContain('第6句原话')
   })
+
+  it('上游一直不回话时，2s 计时器把请求切掉并降级成空串', async () => {
+    // 验收里"5xx / 超时 → 生成照常跑"的超时那一半：只断言过 5xx 与坏 JSON 的话，
+    // "请求挂住、整轮生成跟着挂住"这种坏法是测不出来的。
+    setSourceEnabled(RAG_SOURCE_ID, true)
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          )
+        }),
+    )
+    const t0 = Date.now()
+    await expect(fetchRagSection('佛山天气', 's1')).resolves.toBe('')
+    const spent = Date.now() - t0
+    expect(spent).toBeGreaterThanOrEqual(1500) // 真是被计时器切掉的，不是提前返回
+    expect(spent).toBeLessThan(6000)
+  }, 20000)
 })
