@@ -93,4 +93,40 @@ describe('runAgentLoop 的历史参考注入', () => {
     const first = streamChat.mock.calls[0][0] as Array<{ content?: string }>
     expect(first[0].content).not.toContain('历史参考')
   })
+
+  it('两路并发生成各有各的历史参考，互不串台', async () => {
+    // SDD 跨会话三格里那条"生成中途切会话会不会污染另一条"的守卫。ragSection 是
+    // runAgentLoop 的局部 const，结构上不该串台 —— 这条要给的是证据，不是复述结构。
+    // maxRounds 1 + 无状态流：每路恰好一次 streamChat，payload 能按各自的用户原话归属。
+    streamChat.mockImplementation(() =>
+      (async function* () {
+        yield { delta: '好', done: true }
+      })(),
+    )
+    fetchRagSection.mockImplementation(async (_q: string, exclude: string) =>
+      exclude === 'sA' ? '\n\n## 历史参考\n- 「A独有原话」' : '\n\n## 历史参考\n- 「B独有原话」',
+    )
+
+    const [a, b] = await Promise.all([
+      runAgentLoop([{ role: 'user', content: '甲的这句话' }], { sessionId: 'sA', maxRounds: 1 }),
+      runAgentLoop([{ role: 'user', content: '乙的这句话' }], { sessionId: 'sB', maxRounds: 1 }),
+    ])
+    expect([a.finalText, b.finalText]).toEqual(['好', '好'])
+
+    // exclude 必须取发起时那条会话，而不是"当前打开的那条"
+    expect(fetchRagSection.mock.calls.map((c) => c[1]).sort()).toEqual(['sA', 'sB'])
+
+    type Msg = { role: string; content?: string }
+    const payloads = streamChat.mock.calls.map((c) => c[0] as Msg[])
+    const ownedBy = (marker: string) =>
+      payloads.filter((p) => p.some((m) => typeof m.content === 'string' && m.content.includes(marker)))
+
+    const pA = ownedBy('甲的这句话')
+    const pB = ownedBy('乙的这句话')
+    expect([pA.length, pB.length]).toEqual([1, 1])
+    expect(pA[0][0].content).toContain('A独有原话')
+    expect(pA[0][0].content).not.toContain('B独有原话')
+    expect(pB[0][0].content).toContain('B独有原话')
+    expect(pB[0][0].content).not.toContain('A独有原话')
+  })
 })
