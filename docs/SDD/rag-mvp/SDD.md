@@ -133,30 +133,49 @@ sync_session_docs(user_id, session_id)
 
 ## 验收标准
 
+勾上 = 有实测证据，出处写在每条后面。三层验证的名字：**契约** = `node_modules/.scratch/rag_check.py`（`APP_DB_PATH` 指临时库 + `httpx.ASGITransport` 直接进 app，不占端口）；**前端** = `pnpm --filter web test:run`；**真机** = `node_modules/.scratch/cdp-rag-runtime-probe.mjs`（无头 Chrome → vite:5177 → **真** FastAPI:8020 → 只当上游的假 Responses:8010，零模型 token）。
+
 功能
 
-- [ ] A 账号搜自己说过的独有词命中；B 账号搜同一个词返回空
-- [ ] 当前正在生成的会话不出现在结果里（`exclude` 生效）
-- [ ] 同一会话只返回一张卡
-- [ ] 查询含 `%` 或 `_` 时不匹配全库任意内容（转义生效）
-- [ ] 开关关掉 → system prompt 里没有"历史参考"段
+- [x] A 账号搜自己说过的独有词命中；B 账号搜同一个词返回空 —— 契约第 6 组。正反两头都断：先断"词的主人在自己的 token 下搜得到"，否则"搜不到"只说明索引是空的
+- [x] 当前正在生成的会话不出现在结果里（`exclude` 生效）—— 契约第 5 组 + 真机断"检索请求真的带了 `exclude=<当前会话 id>`"
+- [x] 同一会话只返回一张卡 —— 契约第 5 组（一条会话三句原话全命中也只出一张；去重在 LIMIT 之前）
+- [x] 查询含 `%` 或 `_` 时不匹配全库任意内容 —— 契约第 1 组（`%` / `_` 原样进 Python 侧 `in`）+ 第 5 组把模式串做到 ≥2 字（`%天气%`、`____`）才是正证：前两条会被"丢 <2 字片段"提前挡掉，走不到匹配那一步
+- [x] 开关关掉 → system prompt 里没有"历史参考"段 —— 前端（关着零请求 / 空串不注段）+ 真机（关着时两次 LLM 调用全部无段，且同一条里断"调用数 ≥2"，否则空数组会让 `every` 假过）
 
 跨会话
 
-- [ ] 生成中途切到另一条会话 → 检索结果不污染新会话上下文
-- [ ] 生成中途翻开关 → 在飞那轮不受影响，下一轮才生效
-- [ ] 删掉一条会话 → 它的 `rag_doc` 行随 `ON DELETE CASCADE` 消失，无孤儿行（这是本设计唯一一处真正的越权风险）
+- [x] 生成中途切到另一条会话 → 检索结果不污染新会话上下文 —— 前端"两路并发生成各有各的历史参考，互不串台"：两路 payload 各只含自己那条的段，且 `exclude` 取的是发起时捕获的那条 id 而不是"当前打开的"
+- [x] 生成中途翻开关 → 在飞那轮不受影响，下一轮才生效 —— 前端"生成进行到一半翻开关"。这条的假实现**读真开关**，所以把检索搬进循环里它就会红（已用变异验证：那条 mutation 下 `多轮生成里只检索一次` 与这条同时红、其余四条绿）；后半"关掉之后下一轮真的不再发请求"由前端"关着时一个请求也不发"承担
+- [x] 删掉一条会话 → 它的 `rag_doc` 行随 `ON DELETE CASCADE` 消失，无孤儿行 —— 契约第 3 组（直接 SQL 删）+ 第 6 组补了走路由的那一路（`DELETE /api/sessions/:id` 之后独有词搜不到）
 
 降级
 
-- [ ] 服务端 5xx / 超时 → 生成照常跑，界面不报错
-- [ ] 检索期间点停止 → 请求被中止，不继续等
+- [x] 服务端 5xx / 超时 → 生成照常跑，界面不报错 —— 前端三条：5xx 静默降级、坏 JSON（vite 把 `/api` 回成 SPA 外壳那种形态）静默降级、"上游一直不回话时 2s 计时器把请求切掉并降级成空串"（实测 2006ms，并断下界 1500ms 以排除"提前返回"这种假过）
+- [x] 检索期间点停止 → 请求被中止，不继续等 —— 前端"用户在检索期间点停止"：在 `await` **之前**同步断 `signal.aborted`。放到 await 之后断会被 2s 计时器替它 aborted，等于断言"检索不响应停止"
 
-验证方式
+## 验证方式与当前结果
 
-- 服务端契约：沿用 `auth_check.py` 模式（`APP_DB_PATH` 指临时库 + `httpx.ASGITransport` 直接进 app，不占端口、不碰 dev server），覆盖上面 5 条功能 + 2 条降级
-- UI 侧：无头 Chrome CDP 验"开关翻动后下一轮 system prompt 变化"与"检索失败时界面静默"
-- `pnpm build` 已可用但仍以 `pnpm --filter web test:run` 为主口径；`runAgentLoop.ts` 本身零单测，只能靠离线假 LLM 链路兜（AGENTS.md 坑 5、坑 6）
+| 层 | 命令 | 结果 |
+|---|---|---|
+| 服务端契约 | `PYTHONIOENCODING=utf-8 <Python312> node_modules/.scratch/rag_check.py` | ALL PASS（51 项，7 组） |
+| 前端单测 | `pnpm --filter web test:run` | 152 passed / 18 files（rag 两个文件 22 项） |
+| 真机端到端 | `node node_modules/.scratch/cdp-rag-runtime-probe.mjs` | ALL PASS（18 项） |
+| 构建 / lint | `pnpm build`、`pnpm --filter web lint` | 通过；只剩主 chunk 1,016 kB 那条既有提示；lint 0 error |
+
+契约脚本与探针都靠 `APP_DB_PATH` + 一次性临时 Chrome profile 隔离，不写 `data/app.db`；两者都在 `node_modules/.scratch/`（gitignore 内，`pnpm install` 会清）。假上游只实现 `POST */responses` 一条路由，另有 `GET /__seen` 回"模型这次到底看见了什么" —— 注入段是否真的进了 system 只能这么断，看界面看不出来。会话、消息、工作区、`rag_doc` 必须由**真 FastAPI** 持有，否则检索层整个被跳过（现成的 `fake-llm.mjs` / `fake-llm-skills.mjs` 是全套假后端，不能拿来跑这一路）。
+
+## 实现之后仍未验证的（别当成已完成）
+
+- **召回质量没有评估**。断言的是"给定这句查询，命中与不命中哪些条目"的契约，不是"用户会觉得它记得我"。片段是按标点切句得来的，两句没有共同的标点片段就必然召回 0 —— 探针第一版就因此整片红（`帮我看看北京的天气` 整句无标点 ⇒ 只有一个 9 字片段，它不是 `看一下佛山的天气` 的连续子串），那是设计如此而不是 bug；把两句改成共享前导片段（`做一个天气页面，展示佛山` / `做一个天气页面，展示杭州`）才跑得通。要谈效果，需要真实语料上的命中率。
+- **UI 只测到**"面板能开 / 有'历史参考'那一行 / 默认关 / 翻动后 `capabilities-enabled` 落 `{"rag":true}` / 下一轮生效"。分组标题下的排版与深色模式没有截图基线。
+- **`runAgentLoop.ts` 主循环只多了一份窄范围桩测**（`runAgentLoopRag.test.ts`，6 项，全部围绕历史参考注入），其余路径（工具执行、截断、落库时机）仍无测。
+- **闸门开着的形态**没测过检索这一路：契约第 7 组只断"检索不产生记账"。
+- 探针环境里撞到一个**既有的、不属于本特性**的缺陷，记在下面。
+
+## 撞到的一个既有缺陷（记录，本特性未修）
+
+冷启动与刷新后的几秒内 `currentSessionId` 还是 `null`：`components/Sidebar.tsx:156` 的 `loadSessions().then(() => initFirstSession())` 是一串串行 await（GET sessions → GET sessions → POST sessions → GET messages → GET workspace），实测要 2~7 次轮询（每次 500ms + 一次 CDP 往返）才落定。这期间输入框已可用，而 `store/chatStore.ts:109` 的 `if (!sessionId) return` 会把发出去的那句话**静默丢掉**：没有任何网络请求、控制台没有报错、界面不动。真机探针第一轮就是这么停住的，最后靠在每轮发送前"等 `currentSessionId` 落定且是刚建的那一条"才跑通（探针里的 `waitForFreshSession`）。修法属于会话初始化那条链（发送前 await，或 init 未定时禁用 composer），不在本特性范围内。
 
 ## 非目标（本版明确不做）
 

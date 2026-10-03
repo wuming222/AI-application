@@ -8,6 +8,15 @@
 
 **Tech Stack:** FastAPI + SQLite（`packages/server/app/`）、React 19 + TS + zustand + vitest（`packages/web/src/`）、pnpm workspace。服务端契约断言用 `httpx.ASGITransport` 直进 app，不占端口。
 
+> **执行状态（2026-10-03）**：下面 7 个 Task 已全部落地，但**逐步骤的 checkbox 没有回勾** —— 结果与验证口径以 `SDD.md` 的"验收标准"和"验证方式与当前结果"两节为准（契约 51 项 / 前端 152 用例 / 真机 18 项 / build+lint 绿）。
+>
+> **计划与实现的偏差，留档给下一个读的人**：
+> 1. **Task 7 设想的探针拓扑是错的**。计划写"照 `fake-llm.mjs` 那套离线假 LLM 改"，但 `fake-llm.mjs` / `fake-llm-skills.mjs` 是**全套假后端**（连 `/api/sessions` 与 workspace 都自己发），拿它跑 RAG 会把 `rag_doc` 的写入与检索整层跳过，测到的是假后端的形状。真机那一路必须挂**真 FastAPI**（临时库 + 一次性 Chrome profile），假服务只当上游，见 `fake-llm-upstream-rag.mjs`。
+> 2. 计划里 4 处服务端代码写错了，实现时改过：`INSERT INTO sessions` 的占位符个数、messages 插入多带一个没用到的下标、`PRAGMA foreign_key_list` 的元组下标（`on_delete` 是 `f[6]` 不是 `f[7]`）、以及 `spend_log` 里没有 `record_spend` 这个名字（真名 `record`，且 `snapshot` 首参是 `user_id`）。
+> 3. 计划给的一条断言是"永远为真"的形状（`... if False else True`），换成了真的"assistant 的话不入索引"。
+> 4. **`vi.mock` 的路径相对测试文件解析**，且解析不到时**静默当作没有这个 mock**：`vi.mock('../llm/router')` 不报错但也不生效，表现是单测往外网发请求。`src/agent/__tests__/` 下要 mock `src/agent` 之外的模块得写 `../../`。
+> 5. 计划没预见到"数请求"这一类判据的两个坑：CDP 会把 CORS 预检 `OPTIONS` 也算一次请求（要剔掉），以及探针测试数据必须能被按标点切片的打分器命中（见 SDD 的"实现之后仍未验证的"）。
+
 **Commands（全部在仓库根目录）:**
 
 | 用途 | 命令 |

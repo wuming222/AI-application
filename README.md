@@ -12,7 +12,8 @@
 - **能力（capability）接入**：
   - **MCP 外部工具** —— 后端手搓的最小 MCP 客户端（Streamable HTTP + SSE），工具清单按需注册进 registry。
   - **技能（Skill）** —— 内置技能包 + 阿里云百炼技能库，`skill_search` / `skill_load` / `skill_file` 三个工具，正文按需注入上下文。
-  - 两者都在界面上有独立开关面板（全局偏好，不属于任何一条会话）。
+  - **历史参考（RAG）** —— 每轮生成前自动检索该账号过往会话里的需求原话与文件名，把最相关的几条拼成 system 的一段"偏好线索"。默认关（一开就给每个人的第一轮无条件加一次外部调用），在能力面板"检索"那一节翻；不注册任何工具，也不用 embedding。
+  - 三条通道在界面上合用一个能力面板，按节分开（外部工具 / 检索 / 技能）；开关是**这台机器上的全局偏好**，不属于任何一条会话，换账号也不跟着清。
 - **语音输入**：麦克风采集 + PCM 编码，走后端 WebSocket 代理 DashScope 实时 ASR。
 - **Markdown 渲染**：回答与技能正文按 Markdown 渲染，代码块高亮。
 - **账号与隔离**：注册/登录（scrypt 口令 + 服务端不透明 token），`/api/*` 全站鉴权，会话按 `user_id` 归属；改密即吊销全部 token。忘记密码只有站长本机跑脚本重置。
@@ -23,7 +24,7 @@
 | 层 | 选型 |
 |---|---|
 | 前端 | React 19 + TypeScript + Vite + Ant Design 6 + Zustand 5 |
-| 测试 | Vitest（130 用例，覆盖 agent / llm / store / preview / utils 纯逻辑） |
+| 测试 | Vitest（152 用例，覆盖 agent / llm / store / preview / utils 纯逻辑） |
 | 静态检查 | oxlint；`tsc -b` 参与构建 |
 | 后端 | Python 3.10+ / FastAPI / uvicorn / httpx / websockets |
 | 存储 | SQLite（WAL + 外键），服务端注入 LLM API key |
@@ -63,7 +64,7 @@ pnpm dev
 ## 验证改动
 
 ```bash
-pnpm --filter web test:run   # 前端单测，130 用例
+pnpm --filter web test:run   # 前端单测，152 用例
 pnpm --filter web lint       # oxlint
 pnpm build                   # tsc -b && vite build
 ```
@@ -80,7 +81,7 @@ cd packages/server && python -m app.scripts.reset_password <username> <newpasswo
 
 ```
 packages/web/            前端（Vite + React）
-  src/agent/             Agent 主循环、工具注册表、能力（MCP / 技能）provider、上下文预算
+  src/agent/             Agent 主循环、工具注册表、能力（MCP / 技能 / 历史参考）provider、上下文预算
   src/llm/               provider 路由与流式协议实现（含 mock）
   src/store/             zustand 分片状态：chatStore / sessionStore / workspaceStore / authStore
   src/components/        界面：AuthGate / Workbench / Sidebar / ChatInterface / MessageList / AgentProgress / PreviewArea / CapabilityPanel / SkillPanel
@@ -98,7 +99,7 @@ docs/
 
 ## 文档
 
-- 设计与实现方案：[`docs/SDD/`](docs/SDD/)（按特性一份，如 `ai-app-gen-mvp`、`mcp-external-tools`、`agent-skills`、`multi-tenant-p0`）
+- 设计与实现方案：[`docs/SDD/`](docs/SDD/)（按特性一份，如 `ai-app-gen-mvp`、`mcp-external-tools`、`agent-skills`、`multi-tenant-p0`、`rag-mvp`）
 - 每日需求记录：[`docs/origin/`](docs/origin/)
 - Agent 工作约定与踩坑记录：[`AGENTS.md`](AGENTS.md)
 
@@ -108,4 +109,5 @@ docs/
 - 所有账号共用一把上游 API key，`SPEND_DAILY_LIMIT` 默认关闭，暂无按人限流。
 - MCP server 清单写死在服务端（当前两个：高德地图默认开、AntV 图表默认关），界面上只能开关、不能增删；百炼 workspace 同理走环境变量。
 - 语音识别依赖 DashScope 原生 WS 协议（复用 `LLM_API_KEY`），不是 OpenAI realtime；上游若换成非 DashScope 服务，语音那一路不通，其余功能不受影响。
+- 历史参考只索引"需求原话 + 文件名"，**搜不到代码正文**，因此复用不了历史骨架；召回是按标点切句后的子串命中，两句没有共同片段就必然返回空 —— 第一版目标是把 `索引→检索→注入→可开关` 走通，召回质量未做评估（详见 `docs/SDD/rag-mvp/SDD.md`）。
 - 无 key / 断网时把 `VITE_LLM_PROVIDER` 设成 `mock`，可用内置 Mock provider 跑通完整链路。
