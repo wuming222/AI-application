@@ -60,6 +60,17 @@ def init_db() -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id);
+
+        CREATE TABLE IF NOT EXISTS rag_doc (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_rag_doc_user ON rag_doc(user_id, kind);
     """)
     try:
         conn.execute("ALTER TABLE messages ADD COLUMN images TEXT")
@@ -71,4 +82,10 @@ def init_db() -> None:
         conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
     except sqlite3.OperationalError:
         pass
+    # 回填必须排在 ALTER 之后：它要读 sessions.user_id，而那列是上面刚补的。
+    # 函数内 import 是有意的：app.rag 与 app.database 互相认识会成导入环，
+    # rag.py 本身不 import database，只有 init_db 单向取它。
+    from app.rag import backfill_if_empty
+
+    backfill_if_empty(conn)
     conn.close()

@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from app.auth import AuthUser, current_user
 from app.database import get_connection
+from app.rag import sync_session_docs
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -179,6 +180,9 @@ def add_messages(
         "UPDATE sessions SET updated_at = ? WHERE id = ? AND user_id = ?",
         (now, session_id, user.id),
     )
+    # 索引跟着正文一起落地。两个调用点都写：整轮结束时 saveMessages 与 saveWorkspace 的
+    # 先后顺序前端没有保证，只挑一个就会出现"改了文件结构但卡片里的文件名还是上一轮的"。
+    sync_session_docs(conn, user.id, session_id)
     conn.commit()
     conn.close()
     return {"count": len(messages)}
@@ -219,6 +223,7 @@ def update_workspace(
         "UPDATE sessions SET updated_at = ? WHERE id = ? AND user_id = ?",
         (_now(), session_id, user.id),
     )
+    sync_session_docs(conn, user.id, session_id)
     conn.commit()
     conn.close()
     return {"ok": True}
