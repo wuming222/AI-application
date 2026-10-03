@@ -99,7 +99,7 @@ sync_session_docs(user_id, session_id)
 
 ## 注入与开关
 
-- 开关：`CapabilityKind` 加 `'rag'` + `applyProviderSources('rag', [SOURCE])`。`capabilityStore.ts` 与 `CapabilityPanel.tsx` 都不用碰 —— 面板按 `kind !== 'skill'` 过滤（`CapabilityPanel.tsx:28`），新 kind 自动出一行 Switch。
+- 开关：`CapabilityKind` 加 `'rag'` + `applyProviderSources('rag', [SOURCE])`。`capabilityStore.ts` 确实不用碰（它完全不认识工具，一个没有工具定义的 source 照样进快照、照样拿到一行 Switch）。但 **`CapabilityPanel.tsx` 要改**：原先它按 `kind !== 'skill'` 过滤后统一挂在写死的"外部工具"标题下，入口按钮的 Tooltip 又写着"外部工具（MCP）"，检索这一家会被读成"第 N 个 MCP 服务"。已改为按 kind 分节（`GROUP_TITLE`，未列出的 kind 落"其他"而不是静默消失）+ Tooltip 改口。
 - `defaultEnabled: false`。判据不是偏好是既有先例：新接入的能力默认关（AntV 那条就是），因为开关一开就无条件给每个人第一轮加一次外部调用。
 - **判据处只允许一个**（AGENTS.md"一个开关只允许有一个判据处"，09-19 踩过技能开关与索引段分家）：`isSourceEnabled('rag')` 的唯一读者是 `providers/rag.ts` 的 `fetchRagSection()`，关着就返回空串且**不发请求**。`buildSystemPrompt` 只接收已经算好的字符串 —— 让它读 store 会把判据劈成"拼接处读一次、发起处再判一次"，两边不一致时界面显示"历史参考"开着、实际根本没请求。
 - **检索定在循环外一次**：`runAgentLoop.ts:82-88` 每轮重算 `allMessages[0].content`。若把检索写在 `buildSystemPrompt` 内，一轮 5 步工具调用就是 5 次 HTTP 往返，且第 2 次起会把"刚生成到一半的这轮"当历史。正确做法是进循环前 fetch 一次，存局部 const 作为第三个参数传入 —— 与 `skillIndex` 同构，只是那个每轮重算（目录异步来），这个锁死不变。

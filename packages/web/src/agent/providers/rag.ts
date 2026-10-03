@@ -7,8 +7,10 @@ import { authFetch } from '../../api/auth'
  * 检索由每轮生成无条件发起，模型没有"要不要查"的决定权 —— 按论文定义这不是 Self-RAG，
  * 是 fixed top-k 前置召回。所以这里只有两件事：提供一个全局开关，和把检索结果拼成文本。
  *
- * 面板那一行是白送的：CapabilityPanel 按 `kind !== 'skill'` 过滤渲染，一个没有工具定义的
- * source 照样拿到一个 Switch。代价是 `registry.getDefinitionsFor()` 筛不到任何东西 ——
+ * 面板那一行不是完全白送的：CapabilityPanel 按 kind 分节渲染，一个没有工具定义的 source
+ * 确实能拿到一行 Switch，但"外部工具"那个标题与入口 Tooltip 得先为这一家另开一节，
+ * 否则界面把它读成第 N 个 MCP 服务（已改：CapabilityPanel 的 GROUP_TITLE + ChatInterface 的 Tooltip）。
+ * 代价是 `registry.getDefinitionsFor()` 筛不到任何东西 ——
  * 这个开关的唯一作用点就是本文件 `fetchRagSection` 开头那一句判断。
  */
 
