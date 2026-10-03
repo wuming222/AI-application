@@ -8,6 +8,9 @@ import { mcpCapabilitiesReady } from './providers/mcp'
 // 这条 import 不能删：providers/skills 在模块初始化时就静态注册了 source 'skills'
 // 与 skill_search / skill_load / skill_file 三个工具（它们不等任何异步清单，所以不占下面那场 race）。
 import { buildSkillIndexSection } from './providers/skills'
+// rag provider 在 import 期就把自己注册进 capabilityStore（开关面板那一行），
+// 与 providers/skills 同形态；这条 import 删不得。
+import { fetchRagSection, lastUserQuery } from './providers/rag'
 import { getEnabledSourceIds } from './capabilityStore'
 import type { AgentLoopOptions, AgentProgressStep, ToolContext } from './types'
 
@@ -28,13 +31,13 @@ const SYSTEM_PROMPT = `你是一个 AI 应用生成助手。用户告诉你想�
 2. 不使用 fetch 或动态 import。
 3. 修改已有文件时，优先使用 edit_file 进行局部替换。仅在需要大幅重写时才用 write_file。修改前先 read_file 查看当前内容。`
 
-function buildSystemPrompt(files: Record<string, string>, skillIndex = ''): string {
+function buildSystemPrompt(files: Record<string, string>, skillIndex = '', ragSection = ''): string {
   const listing = Object.keys(files)
     .sort()
     .map((p) => `- ${p} (${files[p].length} 字符)`)
     .join('\n')
   const section = listing ? `\n\n当前工作区文件：\n${listing}` : '\n\n当前工作区为空。'
-  return SYSTEM_PROMPT + section + skillIndex
+  return SYSTEM_PROMPT + section + skillIndex + ragSection
 }
 
 export async function runAgentLoop(
@@ -64,6 +67,10 @@ export async function runAgentLoop(
   ]).finally(() => clearTimeout(waitTimer))
   const toolDefs = registry.getDefinitionsFor(getEnabledSourceIds())
   const limits = resolveLimits()
+  // 历史参考：一轮一次，定在循环之外。system 正文每轮都要重算（文件清单得最新），
+  // 把检索写进 buildSystemPrompt 就是 N 次往返，而且第 2 次起会把"刚生成到一半的本轮"当历史。
+  // 关掉时 fetchRagSection 自己返回 ''，所以这里不再判一次开关 —— 判据只允许有一处。
+  const ragSection = await fetchRagSection(lastUserQuery(messages), options.sessionId, signal)
 
   for (let round = 1; round <= maxRounds; round++) {
     if (signal?.aborted) break
@@ -83,6 +90,7 @@ export async function runAgentLoop(
         allMessages[0].content = buildSystemPrompt(
           useWorkspaceStore.getState().filesFor(toolCtx.sessionId),
           buildSkillIndexSection(),
+          ragSection,
         )
       }
       const payload = truncateMessages(allMessages, limits)

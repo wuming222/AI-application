@@ -10,8 +10,8 @@ export interface ToolContext {
   sessionId: string
 }
 
-/** 能力的提供方。管道（发现→注册→开关→面板→进度→错误）两边共用，语义差异见 durability / effect。 */
-export type CapabilityKind = 'mcp' | 'skill'
+/** 能力的提供方。管道（发现→注册→开关→面板→进度→错误）共用；rag 这一家只有开关、没有工具定义。 */
+export type CapabilityKind = 'mcp' | 'skill' | 'rag'
 /** transient = 压掉无妨（这一次的事实）；durable = 之后每一轮都要遵守（如 skill 正文）。 */
 export type ToolDurability = 'transient' | 'durable'
 /** data = 只回答数据；instructions = 返回值会改写模型后续行为。 */
