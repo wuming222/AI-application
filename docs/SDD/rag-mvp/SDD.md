@@ -27,7 +27,7 @@
    │ 按标点/空白切片段，丢 <2 字，最多取 8 个
    ▼
 GET /api/rag/search ──► rag_doc WHERE user_id=? AND session_id<>exclude
-   │                     逐片段 LIKE，命中计数打分
+   │                     逐片段子串匹配(Python)，命中计数打分
    │                     按会话去重取最高分，score DESC + created_at DESC，LIMIT 5
    ▼
 top-5 卡片 ──► buildSystemPrompt 追加"历史参考"段 ──► 模型
@@ -83,7 +83,7 @@ sync_session_docs(user_id, session_id)
 
 展示用的会话标题要 `JOIN sessions` 取 —— 这与上面"`user_id` 显式存一份，隔离判据只有一句话"不矛盾：隔离只看 `rag_doc.user_id` 那一列，JOIN 只为带出一个显示字段，不参与"这条属不属于你"的判断。
 
-安全点（不实现就是静默越权）：片段是用户输入，`%` 与 `_` 在 LIKE 里是通配符 —— 输入一个 `%` 等于"匹配全库"，5 张卡会变成随机 5 条历史。必须先转义（`%`→`\%`、`_`→`\_`，配 `ESCAPE '\'`），参数一律绑定不拼串。
+子串匹配放在 Python 侧而不是拼进 SQL 的 `LIKE`：`%` 与 `_` 在 `LIKE` 里是通配符，输入一个 `%` 等于"匹配全库"，5 张卡会变成随机 5 条历史。改成取出行之后 `fragment in body` 比对，用户输入不是模式，这个后门不存在；SQL 里只剩 `WHERE user_id = ?` 与 `session_id <> ?` 两个绑定参数。代价是按用户取全表行 —— 本版语料只有需求原话与文件名（实测本地 12 条会话合计 310 字符），且已实测 LIKE 扫 1000 行 / 6 MB 只要 7.6 ms，量级上无风险。验收断言"输入 `%` 不得返回全库"保留，测的正是"确实没有模式语义"。
 
 卡片形态（服务端只回结构化数据，拼文本在前端做）：
 
@@ -101,7 +101,7 @@ sync_session_docs(user_id, session_id)
 
 - 开关：`CapabilityKind` 加 `'rag'` + `applyProviderSources('rag', [SOURCE])`。`capabilityStore.ts` 与 `CapabilityPanel.tsx` 都不用碰 —— 面板按 `kind !== 'skill'` 过滤（`CapabilityPanel.tsx:28`），新 kind 自动出一行 Switch。
 - `defaultEnabled: false`。判据不是偏好是既有先例：新接入的能力默认关（AntV 那条就是），因为开关一开就无条件给每个人第一轮加一次外部调用。
-- **判据处只允许一个**（AGENTS.md"一个开关只允许有一个判据处"，09-19 踩过技能开关与索引段分家）：`isSourceEnabled('rag')` 只允许 `buildSystemPrompt` 读。前端发起请求那处不得再读一次 —— 判了就是两个真相源。
+- **判据处只允许一个**（AGENTS.md"一个开关只允许有一个判据处"，09-19 踩过技能开关与索引段分家）：`isSourceEnabled('rag')` 的唯一读者是 `providers/rag.ts` 的 `fetchRagSection()`，关着就返回空串且**不发请求**。`buildSystemPrompt` 只接收已经算好的字符串 —— 让它读 store 会把判据劈成"拼接处读一次、发起处再判一次"，两边不一致时界面显示"历史参考"开着、实际根本没请求。
 - **检索定在循环外一次**：`runAgentLoop.ts:82-88` 每轮重算 `allMessages[0].content`。若把检索写在 `buildSystemPrompt` 内，一轮 5 步工具调用就是 5 次 HTTP 往返，且第 2 次起会把"刚生成到一半的这轮"当历史。正确做法是进循环前 fetch 一次，存局部 const 作为第三个参数传入 —— 与 `skillIndex` 同构，只是那个每轮重算（目录异步来），这个锁死不变。
 - 截断后果：卡片挂在 system 上，`hardTruncate` 的 `head` 是 `groups.slice(0, anchorIdx + 1)`，锚点（首条 user）之前全部无条件保留，所以**丢不掉**；代价是计入 `totalTokens(head)`、从 `hardLimit` 先扣。实测 84 token / 150000 = 0.06%，不值得为它写任何压缩逻辑。
 
