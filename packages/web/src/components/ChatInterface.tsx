@@ -129,7 +129,7 @@ export function ChatInterface() {
               icon={<PaperClipOutlined />}
             />
             <Popover trigger="click" placement="topLeft" content={<CapabilityPanel />}>
-              <Tooltip title="外部工具（MCP）">
+              <Tooltip title="能力开关（外部工具 / 检索）">
                 <Button type="text" className="capability-btn" icon={<ApiOutlined />} />
               </Tooltip>
             </Popover>
